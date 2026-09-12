@@ -1,0 +1,39 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Wing Protocol",
+      "hasCanvas": true,
+      "bodyTextLen": 605,
+      "bodyTextHash": "f66a056241ca864c00d584d7e3c9685d2b72cc98e3dd303edc7694c05b3d15f1",
+      "bodyTextPrefix": "SORTIE BAY Wing Protocol 520 CREDITS 3 KEYS BAY ARMORY VAULT Aet",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Wing Protocol",
+      "hasCanvas": true,
+      "bodyTextLen": 592,
+      "bodyTextHash": "da3a2dbce3f729e23969f57826b89daabbc45519e3ee0be304b38871c8485623",
+      "bodyTextPrefix": "SORTIE BAY Wing Protocol 520 3 BAY ARMORY VAULT Aether Wing INTE",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [
+    "BRAND WARNING: this looks like a game/canvas app but /workspace/public/og.jpg is missing. Games and visually rich apps must ship a custom 1200x630 share card built from the app's own art — the default og.grok.me placeholder card is not acceptable for them. You are not done: open /workspace/.grok/skills/og/SKILL.md and finish the brand-asset pass.",
+    "BRAND WARNING: this looks like a game/canvas app but src/lib/og/site.json is missing \"type\": \"x:game\". X uses og:type=x:game to present the unfurl as a game card — set it in /workspace/src/lib/og/site.json per /workspace/.grok/skills/og/SKILL.md. Do not invent x:type or overload twitter:card as the game signal."
+  ],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}

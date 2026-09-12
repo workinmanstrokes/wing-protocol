@@ -1,0 +1,8 @@
+node_modules/
+.vercel/
+.tanstack/
+dist/
+build/
+.node_modules.lock
+*.log
+.DS_Store
