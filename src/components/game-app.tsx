@@ -523,10 +523,20 @@ function HudOverlay({
 
 function TouchPad({ input }: { input: GameInput }) {
   const origin = useRef<{ x: number; y: number; id: number } | null>(null);
+  const knobRef = useRef<HTMLDivElement>(null);
+  const RADIUS = 40;
+
+  const setKnob = (nx: number, ny: number) => {
+    if (knobRef.current) {
+      knobRef.current.style.transform = `translate(${nx * RADIUS}px, ${ny * RADIUS}px)`;
+    }
+  };
+
   return (
     <>
+      {/* Generous invisible catch-zone: thumb can land anywhere here, not just on the graphic. */}
       <div
-        className="absolute bottom-0 left-0 h-[42%] w-[48%] sm:hidden"
+        className="absolute bottom-0 left-0 h-[42%] w-[48%] touch-none sm:hidden"
         onPointerDown={(e) => {
           (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
           origin.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
@@ -535,17 +545,33 @@ function TouchPad({ input }: { input: GameInput }) {
           if (!origin.current || origin.current.id !== e.pointerId) return;
           const dx = (e.clientX - origin.current.x) / 56;
           const dy = (e.clientY - origin.current.y) / 56;
-          input.setLeftStick(Math.max(-1, Math.min(1, dx)), Math.max(-1, Math.min(1, dy)));
+          const nx = Math.max(-1, Math.min(1, dx));
+          const ny = Math.max(-1, Math.min(1, dy));
+          input.setLeftStick(nx, ny);
+          setKnob(nx, ny);
         }}
         onPointerUp={() => {
           origin.current = null;
           input.setLeftStick(0, 0);
+          setKnob(0, 0);
         }}
         onPointerCancel={() => {
           origin.current = null;
           input.setLeftStick(0, 0);
+          setKnob(0, 0);
         }}
       />
+      {/* Visible joystick — a fixed anchor showing current stick direction. */}
+      <div
+        className="pointer-events-none absolute bottom-7 left-7 grid size-24 place-items-center rounded-full border border-border/60 bg-surface/35 sm:hidden"
+        aria-hidden="true"
+      >
+        <div className="pointer-events-none absolute size-2 rounded-full bg-muted/50" />
+        <div
+          ref={knobRef}
+          className="pointer-events-none size-11 rounded-full border border-accent/70 bg-elevated/90 shadow-lg"
+        />
+      </div>
       <button
         type="button"
         className="absolute bottom-6 right-5 grid size-16 place-items-center rounded-full border border-border bg-surface/80 font-display text-[10px] font-semibold uppercase tracking-wider sm:hidden"

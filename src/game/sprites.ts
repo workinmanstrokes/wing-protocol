@@ -24,7 +24,7 @@ function plate(
   y: number,
   w: number,
   h: number,
-  fill: string,
+  fill: string | CanvasGradient,
   stroke: string,
   r = 2,
 ) {
@@ -36,7 +36,12 @@ function plate(
   ctx.stroke();
 }
 
-function poly(ctx: CanvasRenderingContext2D, pts: number[][], fill: string, stroke?: string) {
+function poly(
+  ctx: CanvasRenderingContext2D,
+  pts: number[][],
+  fill: string | CanvasGradient,
+  stroke?: string,
+) {
   ctx.beginPath();
   ctx.moveTo(pts[0]![0], pts[0]![1]);
   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i]![0], pts[i]![1]);
@@ -48,6 +53,94 @@ function poly(ctx: CanvasRenderingContext2D, pts: number[][], fill: string, stro
     ctx.lineWidth = 1.1;
     ctx.stroke();
   }
+}
+
+/** Diagonal light-to-dark shading gradient, used to give flat plates a sense of form. */
+function shade(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  light: string,
+  dark: string,
+) {
+  const g = ctx.createLinearGradient(x, y, x, y + h);
+  g.addColorStop(0, light);
+  g.addColorStop(1, dark);
+  return g;
+}
+
+function polyGrad(
+  ctx: CanvasRenderingContext2D,
+  pts: number[][],
+  light: string,
+  dark: string,
+  stroke?: string,
+) {
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const p of pts) {
+    if (p[1]! < minY) minY = p[1]!;
+    if (p[1]! > maxY) maxY = p[1]!;
+  }
+  poly(ctx, pts, shade(ctx, 0, minY, 0, maxY - minY || 1, light, dark), stroke);
+}
+
+function plateGrad(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  light: string,
+  dark: string,
+  stroke: string,
+  r = 2,
+) {
+  plate(ctx, x, y, w, h, shade(ctx, x, y, w, h, light, dark), stroke, r);
+}
+
+/** Small emissive dot — cockpit lights, eyes, thruster nozzles. */
+function glowDot(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  r: number,
+  core: string,
+  glow: string,
+) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r * 2.2);
+  g.addColorStop(0, core);
+  g.addColorStop(0.55, glow);
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 2.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = core;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** Energy-blade stroke: a soft outer glow under a crisp bright core line. */
+function energyStroke(
+  ctx: CanvasRenderingContext2D,
+  build: (c: CanvasRenderingContext2D) => void,
+  core: string,
+  glow: string,
+) {
+  ctx.save();
+  ctx.strokeStyle = glow;
+  ctx.lineWidth = 5;
+  ctx.globalAlpha = 0.4;
+  build(ctx);
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = core;
+  ctx.lineWidth = 1.6;
+  build(ctx);
+  ctx.restore();
 }
 
 const INK = "#14141a";
@@ -76,98 +169,187 @@ export function drawMechTop(ctx: CanvasRenderingContext2D, id: MechId, flash = 0
 }
 
 function drawAether(ctx: CanvasRenderingContext2D) {
-  const w = "#e8eef2";
+  const w = "#f2f6fa";
+  const wDim = "#a8b6c4";
   const a = "#5ec8e8";
-  const d = "#2a3340";
-  poly(ctx, [[-18, -22], [8, -16], [8, 16], [-18, 22]], "#c5d0dc", d);
-  poly(ctx, [[-18, -22], [-6, -28], [4, -18], [4, -8]], w, d);
-  poly(ctx, [[-18, 22], [-6, 28], [4, 18], [4, 8]], w, d);
-  plate(ctx, -10, -8, 22, 16, w, d, 3);
-  plate(ctx, 8, -4, 18, 8, "#dfe7ee", d, 2);
+  const d = "#212a36";
+  // swept wings, top & bottom, drawn first so the fuselage overlaps them
+  polyGrad(ctx, [[-18, -22], [-6, -28], [4, -18], [4, -8]], w, wDim, d);
+  polyGrad(ctx, [[-18, 22], [-6, 28], [4, 18], [4, 8]], w, wDim, d);
+  glowDot(ctx, -6, -27, 1, "#eafcff", a);
+  glowDot(ctx, -6, 27, 1, "#eafcff", a);
+  // main delta body
+  polyGrad(ctx, [[-18, -22], [8, -16], [8, 16], [-18, 22]], "#dbe4ec", "#aab6c2", d);
+  plateGrad(ctx, -10, -8, 22, 16, "#fafcfe", "#c7d1da", d, 3);
+  plateGrad(ctx, 8, -4, 18, 8, "#eef3f7", "#c2cdd8", d, 2);
+  // twin beam rifles, glowing tips
+  ctx.fillStyle = "#3a4552";
+  ctx.fillRect(20, -6.5, 12, 2.4);
+  ctx.fillRect(20, 4.1, 12, 2.4);
   ctx.fillStyle = a;
   ctx.fillRect(24, -2.5, 14, 5);
-  ctx.fillRect(24, -6.5, 10, 2);
-  ctx.fillRect(24, 4.5, 10, 2);
-  plate(ctx, -4, -5, 10, 10, "#1c2833", d, 2);
-  ctx.fillStyle = a;
-  ctx.beginPath();
-  ctx.arc(1, 0, 2.4, 0, Math.PI * 2);
-  ctx.fill();
+  glowDot(ctx, 33, -5.3, 1.3, "#dafffc", a);
+  glowDot(ctx, 33, 5.3, 1.3, "#dafffc", a);
+  // cockpit canopy
+  plateGrad(ctx, -4, -5, 10, 10, "#26313f", "#141b24", d, 2);
+  glowDot(ctx, 1, 0, 2, "#c8f2ff", a);
 }
 
 function drawForge(ctx: CanvasRenderingContext2D) {
-  const r = "#c4453a";
+  const r = "#d8564a";
+  const rDark = "#7a2620";
   const c = "#e8dcc8";
-  const d = "#3a2420";
-  plate(ctx, -16, -14, 28, 28, r, d, 4);
-  plate(ctx, -8, -22, 16, 10, c, d, 2);
-  plate(ctx, -8, 12, 16, 10, c, d, 2);
-  plate(ctx, 6, -8, 20, 16, "#9a3530", d, 3);
-  ctx.fillStyle = "#2a1c18";
+  const cDark = "#b8a888";
+  const d = "#2c1c18";
+  // shoulder missile pod
+  plateGrad(ctx, -14, -24, 10, 6, "#8a8078", "#5a5248", d, 1);
+  ctx.fillStyle = "#1c1210";
+  ctx.fillRect(-12, -23, 2, 4);
+  ctx.fillRect(-9, -23, 2, 4);
+  ctx.fillRect(-6, -23, 2, 4);
+  // main armored hull
+  plateGrad(ctx, -16, -14, 28, 28, r, rDark, d, 4);
+  plateGrad(ctx, -8, -22, 16, 10, c, cDark, d, 2);
+  plateGrad(ctx, -8, 12, 16, 10, c, cDark, d, 2);
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  for (const [rx, ry] of [
+    [-13, -11],
+    [9, -11],
+    [-13, 11],
+    [9, 11],
+  ]) {
+    ctx.beginPath();
+    ctx.arc(rx, ry, 1.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // rotary cannon housing + twin barrels
+  plateGrad(ctx, 6, -8, 20, 16, "#a8433a", "#6e2420", d, 3);
+  ctx.strokeStyle = "#5a3a30";
+  ctx.lineWidth = 1;
+  for (const cy of [-3, 3]) {
+    ctx.beginPath();
+    ctx.arc(26, cy, 3.6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(26, cy, 1.6, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#241612";
   for (let i = 0; i < 5; i++) ctx.fillRect(24, -8 + i * 3.2, 10 + (i % 2), 2.2);
-  plate(ctx, -6, -6, 12, 12, "#2a1c18", d, 2);
-  ctx.fillStyle = "#e8c84a";
-  ctx.fillRect(-2, -2, 6, 4);
+  // furnace core, glowing
+  plate(ctx, -6, -6, 12, 12, "#241612", d, 2);
+  glowDot(ctx, 0, 0, 2.6, "#ffe27a", "#e8842a");
 }
 
 function drawScythe(ctx: CanvasRenderingContext2D) {
-  const b = "#1a1c22";
   const a = "#c4a574";
+  const glow = "#e0c88a";
   const d = "#0a0b10";
-  poly(ctx, [[-16, -18], [4, -10], [4, 10], [-16, 18]], "#12141a", d);
-  plate(ctx, -10, -7, 20, 14, b, a, 3);
-  ctx.strokeStyle = a;
-  ctx.lineWidth = 2;
+  // trailing cloak panels
+  poly(ctx, [[-16, -18], [-24, -9], [-14, -6]], "#0d0e13", d);
+  poly(ctx, [[-16, 18], [-24, 9], [-14, 6]], "#0d0e13", d);
+  // angular stealth body
+  polyGrad(ctx, [[-16, -18], [4, -10], [4, 10], [-16, 18]], "#1c1f27", "#0c0d12", d);
+  plateGrad(ctx, -10, -7, 20, 14, "#22262f", "#121319", a, 3);
+  ctx.strokeStyle = "rgba(196,165,116,0.4)";
+  ctx.lineWidth = 0.8;
   ctx.beginPath();
-  ctx.moveTo(10, 4);
-  ctx.quadraticCurveTo(28, 18, 22, -16);
-  ctx.quadraticCurveTo(18, 6, 10, 2);
+  ctx.moveTo(-9, -3);
+  ctx.lineTo(9, -3);
+  ctx.moveTo(-9, 3);
+  ctx.lineTo(9, 3);
   ctx.stroke();
+  // energy glaive
+  energyStroke(
+    ctx,
+    (c) => {
+      c.beginPath();
+      c.moveTo(10, 4);
+      c.quadraticCurveTo(28, 18, 22, -16);
+      c.quadraticCurveTo(18, 6, 10, 2);
+      c.stroke();
+    },
+    a,
+    glow,
+  );
+  // gold visor slit
   ctx.fillStyle = "#e8c84a";
-  ctx.beginPath();
-  ctx.arc(2, 0, 2.2, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.fillRect(-6, -1.3, 9, 2.6);
+  glowDot(ctx, 2, 0, 1.8, "#fff3cf", "#e8c84a");
 }
 
 function drawDune(ctx: CanvasRenderingContext2D) {
-  const c = "#d8c4a0";
+  const c = "#e0cfae";
+  const cDark = "#a88f68";
   const t = "#b06040";
   const d = "#3a2c20";
-  plate(ctx, -12, -10, 22, 20, c, d, 4);
+  // rear stabilizer fins
+  poly(ctx, [[-14, -12], [-22, -16], [-18, -6]], cDark, d);
+  poly(ctx, [[-14, 12], [-22, 16], [-18, 6]], cDark, d);
+  // rounded armored shell
+  plateGrad(ctx, -12, -10, 22, 20, c, cDark, d, 6);
+  // glowing shield-generator arc
+  ctx.save();
   ctx.beginPath();
   ctx.arc(-6, 0, 14, -1.2, 1.2);
-  ctx.strokeStyle = t;
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = "rgba(224,140,90,0.35)";
+  ctx.lineWidth = 7;
   ctx.stroke();
-  plate(ctx, 8, -5, 16, 10, "#c4a878", d, 2);
+  ctx.strokeStyle = t;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.restore();
+  plateGrad(ctx, 8, -5, 16, 10, "#d4bc94", "#a8916c", d, 2);
+  // heat-scattergun, three barrels
   poly(ctx, [[22, -2], [34, -8], [34, 8], [22, 2]], t, d);
-  plate(ctx, -4, -5, 10, 10, "#2a2218", d, 2);
-  ctx.fillStyle = "#e8a060";
-  ctx.fillRect(-1, -2, 5, 4);
+  ctx.fillStyle = "#5a3020";
+  for (const by of [-4.5, 0, 4.5]) {
+    ctx.beginPath();
+    ctx.arc(31, by, 1.7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // cockpit viewport
+  plateGrad(ctx, -4, -5, 10, 10, "#3a2f22", "#211a13", d, 2);
+  glowDot(ctx, -1, 0, 1.8, "#ffcf8a", "#e8a060");
 }
 
 function drawSerpent(ctx: CanvasRenderingContext2D) {
-  const g = "#2d6b4a";
+  const g = "#3a8259";
+  const gDark = "#1c4a30";
   const gold = "#c4b07a";
-  const d = "#14281c";
-  poly(ctx, [[-14, -16], [6, -8], [6, 8], [-14, 16]], "#24583c", d);
-  plate(ctx, -8, -7, 20, 14, g, gold, 4);
+  const glow = "#7ae0a0";
+  const d = "#0f1f15";
+  // tail vent glow
+  glowDot(ctx, -16, 0, 2, "#a8ffd0", glow);
+  polyGrad(ctx, [[-14, -16], [6, -8], [6, 8], [-14, 16]], "#347a52", gDark, d);
+  // scale segments along the body
+  ctx.strokeStyle = "rgba(20,40,28,0.5)";
+  ctx.lineWidth = 1;
+  for (const sx of [-9, -4, 1]) {
+    ctx.beginPath();
+    ctx.arc(sx, 0, 8, -0.9, 0.9);
+    ctx.stroke();
+  }
+  plateGrad(ctx, -8, -7, 20, 14, g, gDark, gold, 4);
   poly(ctx, [[-6, -16], [8, -20], [10, -10]], gold, d);
   poly(ctx, [[-6, 16], [8, 20], [10, 10]], gold, d);
-  ctx.strokeStyle = "#7ae0a0";
-  ctx.lineWidth = 2.4;
-  ctx.beginPath();
-  ctx.moveTo(12, 0);
-  ctx.lineTo(32, 0);
-  ctx.moveTo(28, 0);
-  ctx.lineTo(34, -6);
-  ctx.moveTo(28, 0);
-  ctx.lineTo(34, 6);
-  ctx.stroke();
-  ctx.fillStyle = "#7ae0a0";
-  ctx.beginPath();
-  ctx.arc(2, 0, 2.4, 0, Math.PI * 2);
-  ctx.fill();
+  // curved fang blades, energy glow
+  energyStroke(
+    ctx,
+    (c) => {
+      c.beginPath();
+      c.moveTo(12, 0);
+      c.lineTo(28, 0);
+      c.moveTo(24, 0);
+      c.quadraticCurveTo(30, -8, 35, -7);
+      c.moveTo(24, 0);
+      c.quadraticCurveTo(30, 8, 35, 7);
+      c.stroke();
+    },
+    "#8ef0b8",
+    glow,
+  );
+  glowDot(ctx, 2, 0, 2, "#c8ffe0", glow);
 }
 
 export function drawEnemyTop(ctx: CanvasRenderingContext2D, id: string, flash = 0) {

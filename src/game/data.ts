@@ -19,6 +19,7 @@ export const MECHS: MechDef[] = [
       cooldown: 9,
       desc: "A wide dual-beam sweep that shreds everything in a cone.",
     },
+    handling: { accel: 13, brake: 3.2 },
   },
   {
     id: "forge",
@@ -35,6 +36,7 @@ export const MECHS: MechDef[] = [
       cooldown: 11,
       desc: "Launches a volley of homing cluster missiles.",
     },
+    handling: { accel: 3.2, brake: 2.4 },
   },
   {
     id: "scythe",
@@ -51,6 +53,7 @@ export const MECHS: MechDef[] = [
       cooldown: 7.5,
       desc: "Blink through the nearest pack, invulnerable, carving a line.",
     },
+    handling: { accel: 22, brake: 18 },
   },
   {
     id: "dune",
@@ -67,6 +70,7 @@ export const MECHS: MechDef[] = [
       cooldown: 12,
       desc: "Raises a kinetic barrier and knocks the horde back.",
     },
+    handling: { accel: 6.5, brake: 11 },
   },
   {
     id: "serpent",
@@ -83,6 +87,7 @@ export const MECHS: MechDef[] = [
       cooldown: 10,
       desc: "Spawns three orbiting fangs that shred nearby hulls.",
     },
+    handling: { accel: 9, brake: 6, weave: 34 },
   },
 ];
 

@@ -38,6 +38,7 @@ export interface MechDef {
   };
   weapon: WeaponKind;
   skill: { name: string; cooldown: number; desc: string };
+  handling: { accel: number; brake: number; weave?: number };
 }
 
 export interface PerkDef {

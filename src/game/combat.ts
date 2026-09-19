@@ -375,8 +375,20 @@ export class Combat {
     }
 
     const odMult = this.overdriveT > 0 ? 1.32 : 1;
-    this.pvx = act.moveX * stats.speed * odMult;
-    this.pvy = act.moveY * stats.speed * odMult;
+    const hd = MECH_MAP[this.mechId].handling;
+    const targetVX = act.moveX * stats.speed * odMult;
+    const targetVY = act.moveY * stats.speed * odMult;
+    const inputMag = Math.hypot(act.moveX, act.moveY);
+    const accelK = 1 - Math.exp(-(inputMag > 0.05 ? hd.accel : hd.brake) * dt);
+    this.pvx += (targetVX - this.pvx) * accelK;
+    this.pvy += (targetVY - this.pvy) * accelK;
+    if (hd.weave && inputMag > 0.05) {
+      const speedMag = Math.hypot(this.pvx, this.pvy) || 1;
+      const perpAng = Math.atan2(this.pvy, this.pvx) + Math.PI / 2;
+      const w = Math.sin(this.time * 7) * hd.weave * Math.min(1, speedMag / stats.speed);
+      this.pvx += Math.cos(perpAng) * w;
+      this.pvy += Math.sin(perpAng) * w;
+    }
     this.px += this.pvx * dt;
     this.py += this.pvy * dt;
     this.px = Math.max(40, Math.min(WORLD - 40, this.px));
