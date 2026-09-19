@@ -1230,12 +1230,30 @@ export class Combat {
     }
     for (const b of this.bullets) {
       if (!b.alive) continue;
-      ctx.fillStyle = b.color;
-      ctx.globalAlpha = b.friendly ? 1 : 0.9;
+      const spd = Math.hypot(b.vx, b.vy) || 1;
+      const trailLen = Math.min(26, spd * 0.03);
+      const tx = b.x - (b.vx / spd) * trailLen;
+      const ty = b.y - (b.vy / spd) * trailLen;
+      const trail = ctx.createLinearGradient(b.x, b.y, tx, ty);
+      trail.addColorStop(0, b.color);
+      trail.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.strokeStyle = trail;
+      ctx.lineWidth = b.r * 1.3;
+      ctx.lineCap = "round";
+      ctx.globalAlpha = b.friendly ? 0.85 : 0.7;
       ctx.beginPath();
-      ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(b.x, b.y);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
       ctx.globalAlpha = 1;
+      const core = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r * 2.2);
+      core.addColorStop(0, "#ffffff");
+      core.addColorStop(0.4, b.color);
+      core.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.r * 2.2, 0, Math.PI * 2);
+      ctx.fill();
     }
     for (const m of this.mobs) {
       if (!m.alive) continue;
@@ -1414,9 +1432,10 @@ export class Combat {
     const y0 = camY - h / 2 - pad;
     const x1 = camX + w / 2 + pad;
     const y1 = camY + h / 2 + pad;
-    ctx.fillStyle = "#16161a";
+    ctx.fillStyle = "#14151a";
     ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
-    ctx.strokeStyle = "rgba(236,236,232,0.04)";
+    const pulse = 0.028 + Math.sin(this.time * 0.6) * 0.012;
+    ctx.strokeStyle = `rgba(94,200,232,${pulse})`;
     ctx.lineWidth = 1;
     const tile = 96;
     const sx = Math.floor(x0 / tile) * tile;
@@ -1439,7 +1458,25 @@ export class Combat {
         if (n === 3) ctx.fillRect(x + 40, y + 50, 18, 18);
       }
     }
-    ctx.strokeStyle = "rgba(196,92,74,0.18)";
+    // ambient vignette framing the visible play area
+    const vg = ctx.createRadialGradient(
+      camX,
+      camY,
+      Math.min(w, h) * 0.25,
+      camX,
+      camY,
+      Math.max(w, h) * 0.8,
+    );
+    vg.addColorStop(0, "rgba(0,0,0,0)");
+    vg.addColorStop(1, "rgba(0,0,0,0.5)");
+    ctx.fillStyle = vg;
+    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    // world-boundary danger perimeter: soft glow under a crisp line
+    ctx.strokeStyle = "rgba(196,92,74,0.14)";
+    ctx.lineWidth = 10;
+    ctx.strokeRect(20, 20, WORLD - 40, WORLD - 40);
+    ctx.strokeStyle = "rgba(224,140,90,0.4)";
+    ctx.lineWidth = 2;
     ctx.strokeRect(20, 20, WORLD - 40, WORLD - 40);
   }
 }

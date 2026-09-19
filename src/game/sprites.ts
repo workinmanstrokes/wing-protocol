@@ -354,50 +354,53 @@ function drawSerpent(ctx: CanvasRenderingContext2D) {
 
 export function drawEnemyTop(ctx: CanvasRenderingContext2D, id: string, flash = 0) {
   ctx.save();
-  if (flash > 0) {
-    ctx.fillStyle = `rgba(255,255,255,${Math.min(0.85, flash)})`;
-  }
   switch (id) {
     case "drone":
-      plate(ctx, -8, -6, 16, 12, "#6a4a38", INK, 3);
-      ctx.fillStyle = "#e04030";
-      ctx.beginPath();
-      ctx.arc(4, 0, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "#4a3830";
+      ctx.strokeStyle = "rgba(74,56,48,0.6)";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(-2, 0, 10, 0, Math.PI * 2);
       ctx.stroke();
+      plateGrad(ctx, -8, -6, 16, 12, "#8a6248", "#4a3428", "#2a1c14", 3);
+      glowDot(ctx, 4, 0, 2, "#ff8a5c", "#e04030");
       break;
     case "walker":
-      plate(ctx, -10, -8, 20, 16, "#4a5340", INK, 3);
-      plate(ctx, 4, -4, 14, 8, "#3a3834", INK, 2);
-      ctx.fillStyle = "#e04030";
-      ctx.fillRect(-2, -3, 6, 6);
-      plate(ctx, -12, -14, 6, 8, "#3a3834", INK, 1);
-      plate(ctx, -12, 6, 6, 8, "#3a3834", INK, 1);
+      plateGrad(ctx, -12, -14, 6, 8, "#4a5340", "#2c332a", INK, 1);
+      plateGrad(ctx, -12, 6, 6, 8, "#4a5340", "#2c332a", INK, 1);
+      plateGrad(ctx, -10, -8, 20, 16, "#5c684e", "#33392c", INK, 3);
+      plateGrad(ctx, 4, -4, 14, 8, "#4a4640", "#26241f", INK, 2);
+      glowDot(ctx, 1, 0, 2, "#ff8a5c", "#e04030");
       break;
     case "crawler":
-      plate(ctx, -16, -10, 32, 20, "#5a4034", INK, 4);
-      plate(ctx, 8, -5, 18, 10, "#3a3028", INK, 2);
-      ctx.fillStyle = "#c45c4a";
-      ctx.fillRect(24, -2, 10, 4);
-      for (const y of [-12, 8]) plate(ctx, -10, y, 8, 6, "#3a3028", INK, 1);
+      for (const y of [-12, 8]) plateGrad(ctx, -10, y, 8, 6, "#4a3a2e", "#241a14", INK, 1);
+      plateGrad(ctx, -16, -10, 32, 20, "#6e5038", "#3a281c", INK, 4);
+      plateGrad(ctx, 8, -5, 18, 10, "#4a3c30", "#241c16", INK, 2);
+      glowDot(ctx, 26, 0, 2.6, "#ffa070", "#c45c4a");
       break;
     case "titan":
-      plate(ctx, -18, -16, 36, 32, "#2a2420", "#8a4030", 5);
-      plate(ctx, -8, -8, 22, 16, "#3a3028", INK, 3);
-      ctx.fillStyle = "#e04030";
-      ctx.fillRect(0, -4, 12, 8);
-      plate(ctx, -22, -22, 10, 12, "#4a3830", INK, 2);
-      plate(ctx, -22, 10, 10, 12, "#4a3830", INK, 2);
-      plate(ctx, 16, -20, 14, 10, "#4a3830", INK, 2);
-      plate(ctx, 16, 10, 14, 10, "#4a3830", INK, 2);
+      plateGrad(ctx, -22, -22, 10, 12, "#5a4230", "#2a1e14", INK, 2);
+      plateGrad(ctx, -22, 10, 10, 12, "#5a4230", "#2a1e14", INK, 2);
+      plateGrad(ctx, 16, -20, 14, 10, "#5a4230", "#2a1e14", INK, 2);
+      plateGrad(ctx, 16, 10, 14, 10, "#5a4230", "#2a1e14", INK, 2);
+      plateGrad(ctx, -18, -16, 36, 32, "#38302a", "#181310", "#a85838", 5);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(-18, -16, 36, 32);
+      ctx.clip();
+      ctx.strokeStyle = "rgba(232,180,74,0.28)";
+      ctx.lineWidth = 4;
+      for (let x = -34; x < 20; x += 8) {
+        ctx.beginPath();
+        ctx.moveTo(x, 18);
+        ctx.lineTo(x + 18, -18);
+        ctx.stroke();
+      }
+      ctx.restore();
+      plateGrad(ctx, -8, -8, 22, 16, "#4a4038", "#221c16", INK, 3);
+      glowDot(ctx, 5, 0, 3.4, "#ffb070", "#e04030");
       break;
     case "ace":
       poly(ctx, [[-16, -14], [18, -6], [18, 6], [-16, 14]], "#1a1014", "#c4453a");
-      plate(ctx, -6, -6, 18, 12, "#2a1418", "#c4453a", 2);
       ctx.strokeStyle = "#e8c8c8";
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -406,10 +409,10 @@ export function drawEnemyTop(ctx: CanvasRenderingContext2D, id: string, flash = 
       ctx.moveTo(12, 8);
       ctx.lineTo(28, 16);
       ctx.stroke();
-      ctx.fillStyle = "#e04030";
-      ctx.beginPath();
-      ctx.arc(4, 0, 2.6, 0, Math.PI * 2);
-      ctx.fill();
+      glowDot(ctx, 27, -16, 0.9, "#ffdada", "#c4453a");
+      glowDot(ctx, 27, 16, 0.9, "#ffdada", "#c4453a");
+      plateGrad(ctx, -6, -6, 18, 12, "#3a2024", "#180d0f", "#c4453a", 2);
+      glowDot(ctx, 4, 0, 2.4, "#ffb0a8", "#e04030");
       break;
     default:
       plate(ctx, -8, -8, 16, 16, "#666", INK, 2);
@@ -417,7 +420,7 @@ export function drawEnemyTop(ctx: CanvasRenderingContext2D, id: string, flash = 
   if (flash > 0) {
     ctx.globalAlpha = Math.min(0.7, flash);
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(-20, -20, 40, 40);
+    ctx.fillRect(-24, -24, 48, 48);
   }
   ctx.restore();
 }
@@ -442,6 +445,7 @@ export function drawPortrait(ctx: CanvasRenderingContext2D, id: MechId, w: numbe
 export function drawPickup(ctx: CanvasRenderingContext2D, kind: string) {
   ctx.save();
   if (kind === "xp") {
+    glowDot(ctx, 0, 0, 2, "#eaf6fb", "#7aa3b8");
     ctx.fillStyle = "#7aa3b8";
     ctx.beginPath();
     ctx.moveTo(0, -6);
@@ -452,13 +456,15 @@ export function drawPickup(ctx: CanvasRenderingContext2D, kind: string) {
     ctx.fill();
     ctx.fillStyle = "#c5e0ee";
     ctx.beginPath();
-    ctx.arc(0, 0, 2, 0, Math.PI * 2);
+    ctx.arc(0, 0, 1.6, 0, Math.PI * 2);
     ctx.fill();
   } else if (kind === "hp") {
+    glowDot(ctx, 0, 0, 2.4, "#ffb0a0", "#c45c4a");
     ctx.fillStyle = "#c45c4a";
     ctx.fillRect(-5, -2, 10, 4);
     ctx.fillRect(-2, -5, 4, 10);
   } else if (kind === "key") {
+    glowDot(ctx, 0, 0, 2, "#fff2d8", "#d4c4a0");
     ctx.strokeStyle = "#d4c4a0";
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -469,6 +475,7 @@ export function drawPickup(ctx: CanvasRenderingContext2D, kind: string) {
     ctx.lineTo(5, 3);
     ctx.stroke();
   } else if (kind === "credit") {
+    glowDot(ctx, 0, 0, 2, "#f2f6fa", "#c5cdd6");
     ctx.fillStyle = "#c5cdd6";
     ctx.beginPath();
     ctx.moveTo(0, -6);
@@ -485,10 +492,10 @@ export function drawPickup(ctx: CanvasRenderingContext2D, kind: string) {
     ctx.textBaseline = "middle";
     ctx.fillText("C", 0, 0.5);
   } else if (kind === "chest") {
-    plate(ctx, -8, -6, 16, 12, "#6a5038", INK, 2);
-    ctx.fillStyle = "#d4c4a0";
+    plateGrad(ctx, -8, -6, 16, 12, "#8a6a48", "#4a3624", INK, 2);
+    ctx.fillStyle = "#e8d8ac";
     ctx.fillRect(-8, -1, 16, 2);
-    ctx.fillRect(-2, -3, 4, 4);
+    glowDot(ctx, 0, -1, 2, "#fff2c8", "#e8c84a");
   }
   ctx.restore();
 }
@@ -496,7 +503,12 @@ export function drawPickup(ctx: CanvasRenderingContext2D, kind: string) {
 export function drawWreck(ctx: CanvasRenderingContext2D, seed: number) {
   ctx.save();
   ctx.rotate(seed);
-  plate(ctx, -16, -10, 28, 18, "#3a3834", "#1a1a1c", 3);
-  plate(ctx, -4, -16, 12, 10, "#4a4038", "#1a1a1c", 2);
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.beginPath();
+  ctx.ellipse(2, 2, 15, 8, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  plateGrad(ctx, -16, -10, 28, 18, "#48443c", "#201f1a", "#0e0e0d", 3);
+  plateGrad(ctx, -4, -16, 12, 10, "#544c40", "#201f1a", "#0e0e0d", 2);
+  glowDot(ctx, -8, 3, 1.4, "#ff9a5c", "#7a3018");
   ctx.restore();
 }
