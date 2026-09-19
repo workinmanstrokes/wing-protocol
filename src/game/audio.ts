@@ -89,6 +89,22 @@ export class GameAudio {
     this.beep(480, 0.2, "triangle", 0.05);
   }
 
+  bossAlert() {
+    this.beep(220, 0.24, "sawtooth", 0.12);
+    this.beep(174, 0.32, "sawtooth", 0.1);
+  }
+
+  overdrive() {
+    this.beep(660, 0.12, "square", 0.08);
+    this.beep(880, 0.16, "square", 0.07);
+    this.beep(1180, 0.2, "triangle", 0.05);
+  }
+
+  slam() {
+    this.beep(120, 0.3, "sawtooth", 0.14);
+    this.beep(70, 0.4, "square", 0.12);
+  }
+
   tickMusic(dt: number, intensity: number) {
     if (!this.ctx || !this.music) return;
     this.musicTimer -= dt;

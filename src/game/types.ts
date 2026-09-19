@@ -101,4 +101,6 @@ export interface HudState {
   skillMax: number;
   paused: boolean;
   leveling: boolean;
+  combo: number;
+  overdrive: number;
 }

@@ -11,6 +11,12 @@ const MAX_BULLET = 720;
 const MAX_PICK = 220;
 const MAX_FX = 520;
 const MAX_FLOAT = 64;
+const MAX_RING = 48;
+const COMBO_WINDOW = 2.4;
+const COMBO_TRIGGER = 8;
+const OVERDRIVE_TIME = 5.5;
+const TITAN_TELEGRAPH = 0.9;
+const ACE_DASH_TIME = 0.38;
 const CELL = 96;
 
 type Bullet = {
@@ -27,6 +33,7 @@ type Bullet = {
   homing: number;
   explode: number;
   color: string;
+  crit: boolean;
 };
 
 type Mob = {
@@ -40,12 +47,18 @@ type Mob = {
   hp: number;
   maxHp: number;
   speed: number;
+  baseSpeed: number;
   dmg: number;
   xp: number;
   fireCd: number;
   flash: number;
   boss: boolean;
   touchCd: number;
+  special: number;
+  telegraph: number;
+  dashT: number;
+  dashDX: number;
+  dashDY: number;
 };
 
 type Pick = {
@@ -68,6 +81,30 @@ type Fx = {
   max: number;
   size: number;
   color: string;
+};
+
+type Ring = {
+  alive: boolean;
+  x: number;
+  y: number;
+  r: number;
+  maxR: number;
+  life: number;
+  max: number;
+  color: string;
+  width: number;
+};
+
+type Float = {
+  alive: boolean;
+  x: number;
+  y: number;
+  vy: number;
+  life: number;
+  max: number;
+  text: string;
+  color: string;
+  crit: boolean;
 };
 
 type Wreck = { x: number; y: number; r: number; seed: number };
@@ -145,11 +182,12 @@ export class Combat {
   private wrecks: Wreck[] = [];
   private bullets = pool(MAX_BULLET, () => ({
     alive: false, x: 0, y: 0, vx: 0, vy: 0, r: 4, dmg: 1, life: 1, pierce: 0,
-    friendly: true, homing: 0, explode: 0, color: "#9fd",
+    friendly: true, homing: 0, explode: 0, color: "#9fd", crit: false,
   }));
   private mobs = pool(MAX_ENEMY, () => ({
     alive: false, kind: "drone", x: 0, y: 0, vx: 0, vy: 0, r: 14, hp: 1, maxHp: 1,
-    speed: 40, dmg: 8, xp: 1, fireCd: 0, flash: 0, boss: false, touchCd: 0,
+    speed: 40, baseSpeed: 40, dmg: 8, xp: 1, fireCd: 0, flash: 0, boss: false, touchCd: 0,
+    special: 0, telegraph: 0, dashT: 0, dashDX: 0, dashDY: 0,
   }));
   private picks: Pick[] = pool(MAX_PICK, () => ({
     alive: false,
@@ -162,6 +200,17 @@ export class Combat {
   private fx = pool(MAX_FX, () => ({
     alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, size: 2, color: "#fff",
   }));
+  private rings = pool(MAX_RING, () => ({
+    alive: false, x: 0, y: 0, r: 0, maxR: 40, life: 0, max: 1, color: "#fff", width: 3,
+  }));
+  private floats = pool(MAX_FLOAT, () => ({
+    alive: false, x: 0, y: 0, vy: -30, life: 0, max: 1, text: "", color: "#fff", crit: false,
+  }));
+  private comboCount = 0;
+  private comboTimer = 0;
+  private overdriveT = 0;
+  private announceText = "";
+  private announceT = 0;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -318,9 +367,16 @@ export class Combat {
     this.skillCd = Math.max(0, this.skillCd - dt);
     this.fireCd = Math.max(0, this.fireCd - dt);
     this.trauma = Math.max(0, this.trauma - dt * 1.6);
+    this.overdriveT = Math.max(0, this.overdriveT - dt);
+    this.announceT = Math.max(0, this.announceT - dt);
+    if (this.comboTimer > 0) {
+      this.comboTimer -= dt;
+      if (this.comboTimer <= 0) this.comboCount = 0;
+    }
 
-    this.pvx = act.moveX * stats.speed;
-    this.pvy = act.moveY * stats.speed;
+    const odMult = this.overdriveT > 0 ? 1.32 : 1;
+    this.pvx = act.moveX * stats.speed * odMult;
+    this.pvy = act.moveY * stats.speed * odMult;
     this.px += this.pvx * dt;
     this.py += this.pvy * dt;
     this.px = Math.max(40, Math.min(WORLD - 40, this.px));
@@ -369,7 +425,7 @@ export class Combat {
 
     if (this.fireCd <= 0) {
       this.shoot(aimX, aimY);
-      this.fireCd = 1 / stats.fire;
+      this.fireCd = 1 / (stats.fire * (this.overdriveT > 0 ? 1.4 : 1));
     }
     if (act.skill && this.skillCd <= 0) this.castSkill(aimX, aimY);
 
@@ -394,6 +450,8 @@ export class Combat {
     this.updateBullets(dt);
     this.updatePicks(dt, stats.magnet);
     this.updateFx(dt);
+    this.updateRings(dt);
+    this.updateFloats(dt);
 
     this.hudT += dt;
     if (this.hudT > 0.08) {
@@ -454,14 +512,16 @@ export class Combat {
       b.y = this.py + Math.sin(ang) * 22;
       b.vx = Math.cos(ang) * speed;
       b.vy = Math.sin(ang) * speed;
+      const isCrit = Math.random() < stats.crit;
       b.r = r;
-      b.dmg = stats.dmg * (Math.random() < stats.crit ? 2.2 : 1) + extra;
+      b.dmg = stats.dmg * (isCrit ? 2.2 : 1) + extra;
       b.life = life;
       b.pierce = pierce;
       b.friendly = true;
       b.homing = mech.weapon === "fang" ? 2.4 : 0;
       b.explode = (this.perks.explosive ?? 0) > 0 ? 18 + 10 * (this.perks.explosive ?? 0) : 0;
       b.color = colors[mech.weapon] ?? "#9fd";
+      b.crit = isCrit;
     };
     const baseAng = Math.atan2(ay, ax);
     if (mech.weapon === "beam") {
@@ -514,6 +574,7 @@ export class Combat {
       b.homing = 0;
       b.explode = 0;
       b.color = "#c5cdd6";
+      b.crit = false;
     }
     if (this.coils > 0) {
       for (let i = 0; i < 3; i++) {
@@ -521,6 +582,14 @@ export class Combat {
         this.hurtCircle(this.px + Math.cos(a) * 50, this.py + Math.sin(a) * 50, 22, stats.dmg * 0.35, false);
       }
     }
+    this.spawnRing(
+      this.px + Math.cos(baseAng) * 24,
+      this.py + Math.sin(baseAng) * 24,
+      13,
+      0.1,
+      colors[mech.weapon] ?? "#9fd",
+      2,
+    );
     this.audio.fire(mech.weapon);
   }
 
@@ -549,7 +618,9 @@ export class Combat {
         b.homing = 0;
         b.explode = 24;
         b.color = "#b8f0ff";
+        b.crit = false;
       }
+      this.spawnRing(this.px, this.py, 130, 0.32, "#b8f0ff", 4);
     } else if (id === "forge") {
       for (let i = 0; i < 10; i++) {
         const ang = Math.atan2(ay, ax) + (Math.random() - 0.5) * 0.8;
@@ -568,17 +639,27 @@ export class Combat {
         b.homing = 5.5;
         b.explode = 36;
         b.color = "#e8a070";
+        b.crit = false;
       }
+      this.spawnRing(this.px, this.py, 60, 0.3, "#e8a070", 3);
     } else if (id === "scythe") {
+      const fromX = this.px;
+      const fromY = this.py;
       this.invuln = 0.4;
       this.px += ax * 240;
       this.py += ay * 240;
       this.px = Math.max(40, Math.min(WORLD - 40, this.px));
       this.py = Math.max(40, Math.min(WORLD - 40, this.py));
+      for (let i = 0; i < 8; i++) {
+        const t2 = i / 7;
+        this.burst(fromX + (this.px - fromX) * t2, fromY + (this.py - fromY) * t2, 2, "#c4a574");
+      }
       this.hurtCircle(this.px, this.py, 70, stats.dmg * 4.5, true);
+      this.spawnRing(this.px, this.py, 80, 0.28, "#c4a574", 3);
     } else if (id === "dune") {
       this.shield = 2.6;
       this.invuln = 0.25;
+      this.spawnRing(this.px, this.py, 165, 0.4, "#e8a060", 4);
       for (const m of this.mobs) {
         if (!m.alive) continue;
         const dx = m.x - this.px;
@@ -593,6 +674,7 @@ export class Combat {
       }
     } else {
       this.coils = 5.2;
+      this.spawnRing(this.px, this.py, 55, 0.24, "#7ae0a0", 2);
     }
   }
 
@@ -617,7 +699,11 @@ export class Combat {
       m.xp = ace ? 48 : 42;
       m.boss = true;
       m.fireCd = 1.2;
+      m.special = ace ? 3.2 : 4;
       this.bosses += 1;
+      this.announceText = ace ? "ACE INBOUND" : "TITAN BREACH";
+      this.announceT = 2.4;
+      this.audio.bossAlert();
     } else {
       const roll = Math.random();
       const kind = t > 0.55 && roll < 0.22 ? "crawler" : t > 0.22 && roll < 0.5 ? "walker" : "drone";
@@ -637,6 +723,10 @@ export class Combat {
     m.vy = 0;
     m.flash = 0;
     m.touchCd = 0;
+    m.baseSpeed = m.speed;
+    m.telegraph = 0;
+    m.dashT = 0;
+    if (!boss) m.special = 0;
   }
 
   private updateMobs(dt: number, _ax: number, _ay: number) {
@@ -661,6 +751,54 @@ export class Combat {
       const dist = Math.hypot(dx, dy) || 1;
       dx /= dist;
       dy /= dist;
+
+      if (m.boss) m.special -= dt;
+      let chaseSpeed = m.speed;
+
+      if (m.kind === "titan") {
+        if (m.telegraph > 0) {
+          const was = m.telegraph;
+          m.telegraph = Math.max(0, m.telegraph - dt);
+          chaseSpeed = 0;
+          if (was > 0 && m.telegraph === 0) {
+            this.audio.slam();
+            this.hitstop = 0.05;
+            this.trauma = Math.min(1, this.trauma + 0.5);
+            this.spawnRing(m.x, m.y, 200, 0.5, "#c45c4a", 5);
+            const pdx = this.px - m.x;
+            const pdy = this.py - m.y;
+            const pd = Math.hypot(pdx, pdy);
+            if (pd < 200 && this.invuln <= 0) {
+              this.damagePlayer(m.dmg * 1.6);
+              if (pd > 1) {
+                this.px += (pdx / pd) * 60;
+                this.py += (pdy / pd) * 60;
+              }
+            }
+            m.special = 4 + Math.random() * 2.4;
+          }
+        } else if (m.special <= 0) {
+          m.telegraph = TITAN_TELEGRAPH;
+          m.special = 999;
+          this.spawnRing(m.x, m.y, 200, TITAN_TELEGRAPH, "#c45c4a", 2);
+        }
+      } else if (m.kind === "ace") {
+        if (m.dashT > 0) {
+          m.dashT = Math.max(0, m.dashT - dt);
+          if (m.dashT === 0) {
+            m.speed = m.baseSpeed;
+            m.special = 2.6 + Math.random() * 1.6;
+          }
+        } else if (m.special <= 0) {
+          m.dashT = ACE_DASH_TIME;
+          m.dashDX = dx;
+          m.dashDY = dy;
+          m.speed = m.baseSpeed * 3.2;
+          m.special = 999;
+          this.burst(m.x, m.y, 6, "#c4453a");
+        }
+      }
+
       let sx = 0;
       let sy = 0;
       const cx = Math.floor(m.x / CELL);
@@ -683,8 +821,13 @@ export class Combat {
           }
         }
       }
-      m.vx = dx * m.speed + sx * 18;
-      m.vy = dy * m.speed + sy * 18;
+      if (m.dashT > 0) {
+        m.vx = m.dashDX * m.speed;
+        m.vy = m.dashDY * m.speed;
+      } else {
+        m.vx = dx * chaseSpeed + sx * 18;
+        m.vy = dy * chaseSpeed + sy * 18;
+      }
       m.x += m.vx * dt;
       m.y += m.vy * dt;
       for (const w of this.wrecks) {
@@ -756,7 +899,7 @@ export class Combat {
           const dx = m.x - b.x;
           const dy = m.y - b.y;
           if (dx * dx + dy * dy < (m.r + b.r) * (m.r + b.r)) {
-            this.hurtMob(m, b.dmg, b.explode);
+            this.hurtMob(m, b.dmg, b.explode, b.crit);
             b.pierce -= 1;
             if (b.pierce < 0) {
               b.alive = false;
@@ -775,13 +918,25 @@ export class Combat {
     }
   }
 
-  private hurtMob(m: Mob, dmg: number, explode: number) {
+  private registerCombo() {
+    this.comboCount += 1;
+    this.comboTimer = COMBO_WINDOW;
+    if (this.comboCount > 0 && this.comboCount % COMBO_TRIGGER === 0) {
+      this.overdriveT = OVERDRIVE_TIME;
+      this.audio.overdrive();
+      this.spawnRing(this.px, this.py, 64, 0.5, "#ffd166", 3);
+    }
+  }
+
+  private hurtMob(m: Mob, dmg: number, explode: number, crit = false) {
     m.hp -= dmg;
     m.flash = 0.16;
     this.burst(m.x, m.y, m.boss ? 10 : 4, m.boss ? "#e8a070" : "#d8d0c4");
+    this.spawnFloat(m.x, m.y, Math.round(dmg).toString(), crit ? "#ffd166" : "#e8e0c8", crit);
     if (m.hp <= 0) {
       m.alive = false;
       this.kills += 1;
+      this.registerCombo();
       this.audio.death();
       this.dropFrom(m);
       if ((this.perks.vampire ?? 0) > 0) {
@@ -791,9 +946,12 @@ export class Combat {
       if (m.boss) {
         this.trauma = Math.min(1, this.trauma + 0.55);
         this.hitstop = 0.07;
+        this.spawnRing(m.x, m.y, 100, 0.65, "#ff8a5c", 4);
         this.drop("chest", m.x, m.y, 1, Math.random() < 0.45 ? "legendary" : "epic");
         this.drop("key", m.x + 16, m.y, 1);
         this.drop("credit", m.x - 16, m.y, 40);
+      } else {
+        this.spawnRing(m.x, m.y, 28, 0.32, "#d8d0c4", 2);
       }
       this.checkLevel();
     } else {
@@ -809,10 +967,13 @@ export class Combat {
       if (dx * dx + dy * dy < (r + m.r) * (r + m.r)) {
         m.hp -= dmg;
         m.flash = 0.14;
+        this.spawnFloat(m.x, m.y, Math.round(dmg).toString(), "#e8a070");
         if (m.hp <= 0) {
           m.alive = false;
           this.kills += 1;
+          this.registerCombo();
           this.dropFrom(m);
+          this.spawnRing(m.x, m.y, m.boss ? 100 : 26, m.boss ? 0.65 : 0.3, "#e8a070", m.boss ? 4 : 2);
           this.checkLevel();
         }
       }
@@ -901,6 +1062,7 @@ export class Combat {
     this.trauma = Math.min(1, this.trauma + 0.4);
     this.audio.hurt();
     this.burst(this.px, this.py, 8, "#c45c4a");
+    this.spawnFloat(this.px, this.py, `-${Math.round(dmg)}`, "#ff6a5c");
     if (this.hp <= 0) this.hp = 0;
   }
 
@@ -929,6 +1091,54 @@ export class Combat {
       p.y += p.vy * dt;
       p.life -= dt;
       if (p.life <= 0) p.alive = false;
+    }
+  }
+
+  private spawnRing(x: number, y: number, maxR: number, life: number, color: string, width = 3) {
+    const r = this.rings.find((q) => !q.alive);
+    if (!r) return;
+    r.alive = true;
+    r.x = x;
+    r.y = y;
+    r.r = maxR * 0.15;
+    r.maxR = maxR;
+    r.life = life;
+    r.max = life;
+    r.color = color;
+    r.width = width;
+  }
+
+  private updateRings(dt: number) {
+    for (const r of this.rings) {
+      if (!r.alive) continue;
+      r.life -= dt;
+      const t = 1 - Math.max(0, r.life) / r.max;
+      r.r = r.maxR * (0.15 + 0.85 * t);
+      if (r.life <= 0) r.alive = false;
+    }
+  }
+
+  private spawnFloat(x: number, y: number, text: string, color: string, crit = false) {
+    const f = this.floats.find((q) => !q.alive);
+    if (!f) return;
+    f.alive = true;
+    f.x = x + (Math.random() - 0.5) * 10;
+    f.y = y - 12;
+    f.vy = -(46 + Math.random() * 26);
+    f.life = crit ? 0.85 : 0.6;
+    f.max = f.life;
+    f.text = text;
+    f.color = color;
+    f.crit = crit;
+  }
+
+  private updateFloats(dt: number) {
+    for (const f of this.floats) {
+      if (!f.alive) continue;
+      f.y += f.vy * dt;
+      f.vy *= 1 - dt * 1.4;
+      f.life -= dt;
+      if (f.life <= 0) f.alive = false;
     }
   }
 
@@ -970,6 +1180,8 @@ export class Combat {
       skillMax: this.skillMax,
       paused: this.paused,
       leveling: this.leveling,
+      combo: this.comboCount,
+      overdrive: this.overdriveT,
     });
   }
 
@@ -1030,11 +1242,39 @@ export class Combat {
         ctx.fillRect(m.x - bw / 2, m.y - m.r - 10, bw * Math.max(0, m.hp / m.maxHp), 3);
       }
     }
+    for (const r of this.rings) {
+      if (!r.alive) continue;
+      const a = Math.max(0, r.life / r.max);
+      ctx.globalAlpha = a * 0.85;
+      ctx.strokeStyle = r.color;
+      ctx.lineWidth = r.width;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     for (const p of this.fx) {
       if (!p.alive) continue;
       ctx.globalAlpha = p.life / p.max;
       ctx.fillStyle = p.color;
       ctx.fillRect(p.x, p.y, p.size, p.size);
+      ctx.globalAlpha = 1;
+    }
+    const moveSpd = Math.hypot(this.pvx, this.pvy);
+    if (moveSpd > 4) {
+      const back = this.aim + Math.PI;
+      const glowR = 14 + Math.min(1, moveSpd / 260) * 10;
+      const gx = this.px + Math.cos(back) * 16;
+      const gy = this.py + Math.sin(back) * 16;
+      const grad = ctx.createRadialGradient(gx, gy, 0, gx, gy, glowR);
+      const accent = MECH_MAP[this.mechId].accent;
+      grad.addColorStop(0, accent);
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(gx, gy, glowR, 0, Math.PI * 2);
+      ctx.fill();
       ctx.globalAlpha = 1;
     }
     ctx.save();
@@ -1059,11 +1299,101 @@ export class Combat {
         ctx.fill();
       }
     }
+    for (const f of this.floats) {
+      if (!f.alive) continue;
+      const a = Math.max(0, f.life / f.max);
+      ctx.globalAlpha = a;
+      ctx.font = f.crit ? "bold 15px sans-serif" : "bold 12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#0a0a0c";
+      ctx.fillText(f.text, f.x + 1, f.y + 1.5);
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.text, f.x, f.y);
+      ctx.globalAlpha = 1;
+    }
     ctx.restore();
+    this.drawMinimap(ctx, w);
+    this.drawAnnounce(ctx, w);
+    this.drawVignette(ctx, w, h);
     if (this.paused && !this.leveling && !this.over) {
       ctx.fillStyle = "rgba(9,9,11,0.45)";
       ctx.fillRect(0, 0, w, h);
     }
+  }
+
+  private drawMinimap(ctx: CanvasRenderingContext2D, w: number) {
+    const size = 100;
+    const margin = 14;
+    const cx = w - size / 2 - margin;
+    const cy = size / 2 + margin + 82;
+    const range = 900;
+    const scale = size / 2 / range;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.fillStyle = "rgba(12,12,15,0.55)";
+    ctx.fillRect(cx - size / 2, cy - size / 2, size, size);
+    for (const m of this.mobs) {
+      if (!m.alive) continue;
+      const dx = m.x - this.px;
+      const dy = m.y - this.py;
+      const d = Math.hypot(dx, dy);
+      if (d > range) continue;
+      const mx = cx + dx * scale;
+      const my = cy + dy * scale;
+      ctx.fillStyle = m.boss ? "#ff5a4a" : "#8a9a78";
+      ctx.beginPath();
+      ctx.arc(mx, my, m.boss ? 3.4 : 1.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (const p of this.picks) {
+      if (!p.alive || p.kind === "xp") continue;
+      const dx = p.x - this.px;
+      const dy = p.y - this.py;
+      const d = Math.hypot(dx, dy);
+      if (d > range) continue;
+      ctx.fillStyle = p.kind === "chest" ? "#e8c84a" : "#5ec8e8";
+      ctx.fillRect(cx + dx * scale - 1, cy + dy * scale - 1, 2, 2);
+    }
+    ctx.fillStyle = MECH_MAP[this.mechId].accent;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = "rgba(236,236,232,0.18)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  private drawAnnounce(ctx: CanvasRenderingContext2D, w: number) {
+    if (this.announceT <= 0) return;
+    const a = Math.min(1, this.announceT / 0.4, this.announceT > 1.8 ? (2.4 - this.announceT) / 0.6 : 1);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, a));
+    ctx.textAlign = "center";
+    ctx.font = "bold 26px sans-serif";
+    ctx.fillStyle = "#c45c4a";
+    ctx.fillText(this.announceText, w / 2 + 1, 75);
+    ctx.fillStyle = "#f2e8dc";
+    ctx.fillText(this.announceText, w / 2, 74);
+    ctx.restore();
+  }
+
+  private drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number) {
+    const frac = this.maxHp > 0 ? this.hp / this.maxHp : 1;
+    if (frac >= 0.32) return;
+    const pulse = 0.25 + Math.sin(this.time * 7) * 0.12 + (0.32 - frac) * 0.9;
+    const g = ctx.createRadialGradient(
+      w / 2, h / 2, Math.min(w, h) * 0.28,
+      w / 2, h / 2, Math.max(w, h) * 0.72,
+    );
+    g.addColorStop(0, "rgba(196,92,74,0)");
+    g.addColorStop(1, `rgba(196,92,74,${Math.max(0, Math.min(0.55, pulse))})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
   }
 
   private drawGround(ctx: CanvasRenderingContext2D, camX: number, camY: number, w: number, h: number) {

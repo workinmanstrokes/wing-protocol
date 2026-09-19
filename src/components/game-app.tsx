@@ -468,6 +468,19 @@ function HudOverlay({
           <p className="mt-1 font-mono text-xs tabular-nums text-muted">
             Hull {Math.ceil(hud?.hp ?? 0)} · Lv {hud?.level ?? 1} · {hud?.kills ?? 0} down
           </p>
+          {(hud?.combo ?? 0) >= 3 && (
+            <p className="mt-1 font-display text-xs font-semibold uppercase tracking-wider text-accent">
+              {hud?.combo}x combo
+            </p>
+          )}
+          {(hud?.overdrive ?? 0) > 0 && (
+            <p
+              className="mt-1 animate-pulse font-display text-xs font-bold uppercase tracking-[0.2em]"
+              style={{ color: "#e8c84a" }}
+            >
+              Overdrive {hud?.overdrive.toFixed(1)}s
+            </p>
+          )}
         </div>
         <div className="text-right">
           <p className="font-display text-3xl font-semibold tabular-nums leading-none">
