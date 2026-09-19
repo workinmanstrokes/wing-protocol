@@ -1,4 +1,4 @@
-export type MechId = "aether" | "forge" | "scythe" | "dune" | "serpent";
+export type MechId = "aether" | "forge" | "scythe" | "dune" | "serpent" | "storm" | "vulture" | "cross";
 export type EnemyId = "drone" | "walker" | "crawler" | "titan" | "ace";
 export type Rarity = "common" | "rare" | "epic" | "legendary";
 export type GearSlot = "weapon" | "armor" | "system";
@@ -17,9 +17,15 @@ export type PerkId =
   | "vampire"
   | "range"
   | "haste"
-  | "spread";
+  | "spread"
+  | "thermal"
+  | "barrier"
+  | "momentum"
+  | "echo"
+  | "static"
+  | "salvage";
 
-export type WeaponKind = "beam" | "gatling" | "melee" | "shotgun" | "fang";
+export type WeaponKind = "beam" | "gatling" | "melee" | "shotgun" | "fang" | "arc" | "mortar" | "lance";
 
 export interface MechDef {
   id: MechId;

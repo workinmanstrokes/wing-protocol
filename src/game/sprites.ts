@@ -164,6 +164,15 @@ export function drawMechTop(ctx: CanvasRenderingContext2D, id: MechId, flash = 0
     case "serpent":
       drawSerpent(ctx);
       break;
+    case "storm":
+      drawStorm(ctx);
+      break;
+    case "vulture":
+      drawVulture(ctx);
+      break;
+    case "cross":
+      drawCross(ctx);
+      break;
   }
   ctx.restore();
 }
@@ -350,6 +359,97 @@ function drawSerpent(ctx: CanvasRenderingContext2D) {
     glow,
   );
   glowDot(ctx, 2, 0, 2, "#c8ffe0", glow);
+}
+
+function drawStorm(ctx: CanvasRenderingContext2D) {
+  const body = "#c8d8f0";
+  const bodyDark = "#7a8ca8";
+  const a = "#4ad8ff";
+  const d = "#1c2838";
+  ctx.strokeStyle = "#3a4a5c";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(-4, -10);
+  ctx.lineTo(-16, -22);
+  ctx.moveTo(-4, 10);
+  ctx.lineTo(-16, 22);
+  ctx.stroke();
+  glowDot(ctx, -16, -22, 1.6, "#eafcff", a);
+  glowDot(ctx, -16, 22, 1.6, "#eafcff", a);
+  ctx.strokeStyle = "rgba(74,216,255,0.5)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-16, -22);
+  ctx.lineTo(-8, -6);
+  ctx.lineTo(-16, 22);
+  ctx.stroke();
+  polyGrad(ctx, [[-14, 0], [0, -16], [22, 0], [0, 16]], body, bodyDark, d);
+  plateGrad(ctx, -6, -6, 16, 12, "#e4ecfa", "#a8b8ce", d, 3);
+  ctx.fillStyle = "#3a4a5c";
+  ctx.fillRect(20, -2, 12, 4);
+  glowDot(ctx, 33, 0, 1.6, "#eafcff", a);
+  glowDot(ctx, 4, 0, 2.4, "#eafcff", a);
+}
+
+function drawVulture(ctx: CanvasRenderingContext2D) {
+  const c = "#5c5a48";
+  const cDark = "#2e2c22";
+  const a = "#c46a2a";
+  const d = "#201e16";
+  poly(ctx, [[-14, -10], [-26, -18], [-20, -4]], "#3a3828", d);
+  poly(ctx, [[-14, 10], [-26, 18], [-20, 4]], "#3a3828", d);
+  plateGrad(ctx, -14, -12, 26, 24, c, cDark, d, 5);
+  plateGrad(ctx, -6, -6, 14, 12, "#4a483a", "#242216", "#141210", 2);
+  ctx.fillStyle = "rgba(0,0,0,0.4)";
+  for (const [rx, ry] of [
+    [-4, -4],
+    [4, -4],
+    [-4, 4],
+    [4, 4],
+  ]) {
+    ctx.beginPath();
+    ctx.arc(rx, ry, 0.9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  plateGrad(ctx, 10, -6, 18, 12, "#4a483a", "#242216", d, 2);
+  ctx.fillStyle = "#1a1812";
+  ctx.beginPath();
+  ctx.arc(26, 0, 3.4, 0, Math.PI * 2);
+  ctx.fill();
+  glowDot(ctx, 26, 0, 1.6, "#ffb070", a);
+  glowDot(ctx, -2, 0, 2, "#ffcf9a", a);
+}
+
+function drawCross(ctx: CanvasRenderingContext2D) {
+  const c = "#f0ece0";
+  const cDark = "#c0b8a0";
+  const a = "#e8c84a";
+  const d = "#3a3424";
+  ctx.strokeStyle = "rgba(232,200,74,0.5)";
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.arc(-6, 0, 15, 0.3, Math.PI * 2 - 0.3);
+  ctx.stroke();
+  plateGrad(ctx, -12, -11, 24, 22, c, cDark, d, 6);
+  ctx.fillStyle = a;
+  ctx.fillRect(-2.5, -9, 5, 18);
+  ctx.fillRect(-9, -2.5, 18, 5);
+  ctx.fillStyle = "#8a8270";
+  ctx.fillRect(14, -2, 18, 4);
+  energyStroke(
+    ctx,
+    (c2) => {
+      c2.beginPath();
+      c2.moveTo(32, 0);
+      c2.lineTo(38, 0);
+      c2.stroke();
+    },
+    "#fff6d8",
+    a,
+  );
+  glowDot(ctx, 36, 0, 1.6, "#fff6d8", a);
+  plateGrad(ctx, -4, -5, 10, 10, "#3a3424", "#201c14", d, 2);
+  glowDot(ctx, 1, 0, 2, "#fff6d8", a);
 }
 
 export function drawEnemyTop(ctx: CanvasRenderingContext2D, id: string, flash = 0) {

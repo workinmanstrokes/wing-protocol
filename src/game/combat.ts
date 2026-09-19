@@ -34,6 +34,7 @@ type Bullet = {
   explode: number;
   color: string;
   crit: boolean;
+  chain: number;
 };
 
 type Mob = {
@@ -182,7 +183,7 @@ export class Combat {
   private wrecks: Wreck[] = [];
   private bullets = pool(MAX_BULLET, () => ({
     alive: false, x: 0, y: 0, vx: 0, vy: 0, r: 4, dmg: 1, life: 1, pierce: 0,
-    friendly: true, homing: 0, explode: 0, color: "#9fd", crit: false,
+    friendly: true, homing: 0, explode: 0, color: "#9fd", crit: false, chain: 0,
   }));
   private mobs = pool(MAX_ENEMY, () => ({
     alive: false, kind: "drone", x: 0, y: 0, vx: 0, vy: 0, r: 14, hp: 1, maxHp: 1,
@@ -211,6 +212,8 @@ export class Combat {
   private overdriveT = 0;
   private announceText = "";
   private announceT = 0;
+  private momentumT = 0;
+  private staticT = 0;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -369,15 +372,25 @@ export class Combat {
     this.trauma = Math.max(0, this.trauma - dt * 1.6);
     this.overdriveT = Math.max(0, this.overdriveT - dt);
     this.announceT = Math.max(0, this.announceT - dt);
+    this.momentumT = Math.max(0, this.momentumT - dt);
     if (this.comboTimer > 0) {
       this.comboTimer -= dt;
       if (this.comboTimer <= 0) this.comboCount = 0;
     }
+    if ((this.perks.static ?? 0) > 0) {
+      this.staticT -= dt;
+      if (this.staticT <= 0) {
+        this.staticT = 0.6;
+        this.hurtCircle(this.px, this.py, 70, 2 + 2 * (this.perks.static ?? 0), false);
+        this.spawnRing(this.px, this.py, 70, 0.3, "#8fd0ff", 2);
+      }
+    }
 
     const odMult = this.overdriveT > 0 ? 1.32 : 1;
+    const momMult = this.momentumT > 0 ? 1 + 0.1 * (this.perks.momentum ?? 0) : 1;
     const hd = MECH_MAP[this.mechId].handling;
-    const targetVX = act.moveX * stats.speed * odMult;
-    const targetVY = act.moveY * stats.speed * odMult;
+    const targetVX = act.moveX * stats.speed * odMult * momMult;
+    const targetVY = act.moveY * stats.speed * odMult * momMult;
     const inputMag = Math.hypot(act.moveX, act.moveY);
     const accelK = 1 - Math.exp(-(inputMag > 0.05 ? hd.accel : hd.brake) * dt);
     this.pvx += (targetVX - this.pvx) * accelK;
@@ -503,6 +516,21 @@ export class Combat {
     return best;
   }
 
+  /** Nearest alive mob other than `exclude`, within `maxDist` of (x, y) — arc-weapon chain targeting. */
+  private nearestMobExcept(exclude: Mob, x: number, y: number, maxDist: number): Mob | null {
+    let best: Mob | null = null;
+    let bd = maxDist * maxDist;
+    for (const m of this.mobs) {
+      if (!m.alive || m === exclude) continue;
+      const d = (m.x - x) ** 2 + (m.y - y) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = m;
+      }
+    }
+    return best;
+  }
+
   private shoot(ax: number, ay: number) {
     const stats = this.base!;
     const mech = MECH_MAP[this.mechId];
@@ -515,8 +543,11 @@ export class Combat {
       melee: "#e8d090",
       shotgun: "#e0a878",
       fang: "#7ae0a0",
+      arc: "#8fd0ff",
+      mortar: "#c9a25a",
+      lance: "#fff0c0",
     };
-    const fireOne = (ang: number, speed: number, r: number, life: number, extra = 0) => {
+    const fireOne = (ang: number, speed: number, r: number, life: number, extra = 0, forceExplode = 0) => {
       const b = this.bullets.find((x) => !x.alive);
       if (!b) return;
       b.alive = true;
@@ -528,12 +559,14 @@ export class Combat {
       b.r = r;
       b.dmg = stats.dmg * (isCrit ? 2.2 : 1) + extra;
       b.life = life;
-      b.pierce = pierce;
+      b.pierce = pierce + (mech.weapon === "lance" ? 3 : 0);
       b.friendly = true;
       b.homing = mech.weapon === "fang" ? 2.4 : 0;
-      b.explode = (this.perks.explosive ?? 0) > 0 ? 18 + 10 * (this.perks.explosive ?? 0) : 0;
+      b.explode =
+        forceExplode + ((this.perks.explosive ?? 0) > 0 ? 18 + 10 * (this.perks.explosive ?? 0) : 0);
       b.color = colors[mech.weapon] ?? "#9fd";
       b.crit = isCrit;
+      b.chain = mech.weapon === "arc" ? 2 + pierce : 0;
     };
     const baseAng = Math.atan2(ay, ax);
     if (mech.weapon === "beam") {
@@ -559,6 +592,21 @@ export class Combat {
       for (let i = 0; i < pellets; i++) {
         const o = (i - (pellets - 1) / 2) * 0.16 * spreadN;
         fireOne(baseAng + o, 640, 4, stats.range / 640);
+      }
+    } else if (mech.weapon === "arc") {
+      for (let i = 0; i < forks; i++) {
+        const o = (i - (forks - 1) / 2) * 0.1;
+        fireOne(baseAng + o, 640, 3.5, stats.range / 640);
+      }
+    } else if (mech.weapon === "mortar") {
+      for (let i = 0; i < forks; i++) {
+        const o = (i - (forks - 1) / 2) * 0.08 + (Math.random() - 0.5) * 0.05;
+        fireOne(baseAng + o, 300, 6, 0.9, 0, 34);
+      }
+    } else if (mech.weapon === "lance") {
+      for (let i = 0; i < forks; i++) {
+        const o = (i - (forks - 1) / 2) * 0.06;
+        fireOne(baseAng + o, 780, 5, stats.range / 780);
       }
     } else {
       for (let i = 0; i < forks; i++) {
@@ -587,6 +635,7 @@ export class Combat {
       b.explode = 0;
       b.color = "#c5cdd6";
       b.crit = false;
+      b.chain = 0;
     }
     if (this.coils > 0) {
       for (let i = 0; i < 3; i++) {
@@ -631,6 +680,7 @@ export class Combat {
         b.explode = 24;
         b.color = "#b8f0ff";
         b.crit = false;
+        b.chain = 0;
       }
       this.spawnRing(this.px, this.py, 130, 0.32, "#b8f0ff", 4);
     } else if (id === "forge") {
@@ -652,6 +702,7 @@ export class Combat {
         b.explode = 36;
         b.color = "#e8a070";
         b.crit = false;
+        b.chain = 0;
       }
       this.spawnRing(this.px, this.py, 60, 0.3, "#e8a070", 3);
     } else if (id === "scythe") {
@@ -684,9 +735,42 @@ export class Combat {
           m.flash = 0.12;
         }
       }
-    } else {
+    } else if (id === "serpent") {
       this.coils = 5.2;
       this.spawnRing(this.px, this.py, 55, 0.24, "#7ae0a0", 2);
+    } else if (id === "storm") {
+      this.overdriveT = Math.max(this.overdriveT, 3.2);
+      this.hurtCircle(this.px, this.py, 130, stats.dmg * 2.2, true);
+      this.spawnRing(this.px, this.py, 130, 0.4, "#8fd0ff", 4);
+    } else if (id === "vulture") {
+      const base = Math.atan2(ay, ax);
+      for (let i = -2; i <= 2; i++) {
+        const ang = base + i * 0.32;
+        const b = this.bullets.find((x) => !x.alive);
+        if (!b) continue;
+        b.alive = true;
+        b.x = this.px;
+        b.y = this.py;
+        b.vx = Math.cos(ang) * 180;
+        b.vy = Math.sin(ang) * 180;
+        b.r = 6;
+        b.dmg = stats.dmg * 2;
+        b.life = 0.8;
+        b.pierce = 0;
+        b.friendly = true;
+        b.homing = 0;
+        b.explode = 40;
+        b.color = "#c9a25a";
+        b.crit = false;
+        b.chain = 0;
+      }
+      this.spawnRing(this.px, this.py, 40, 0.24, "#c9a25a", 3);
+    } else if (id === "cross") {
+      this.shield = 3.2;
+      this.invuln = 0.3;
+      this.hp = Math.min(this.maxHp, this.hp + stats.hp * 0.22);
+      this.hurtCircle(this.px, this.py, 110, stats.dmg * 1.6, true);
+      this.spawnRing(this.px, this.py, 110, 0.35, "#ffe8a0", 4);
     }
   }
 
@@ -902,6 +986,7 @@ export class Combat {
       b.y += b.vy * dt;
       b.life -= dt;
       if (b.life <= 0) {
+        if (b.friendly && b.explode > 0) this.hurtCircle(b.x, b.y, b.explode, b.dmg * 0.6, false);
         b.alive = false;
         continue;
       }
@@ -912,6 +997,21 @@ export class Combat {
           const dy = m.y - b.y;
           if (dx * dx + dy * dy < (m.r + b.r) * (m.r + b.r)) {
             this.hurtMob(m, b.dmg, b.explode, b.crit);
+            if (b.chain > 0) {
+              const next = this.nearestMobExcept(m, b.x, b.y, 260);
+              b.chain -= 1;
+              if (next) {
+                const ddx = next.x - b.x;
+                const ddy = next.y - b.y;
+                const dd = Math.hypot(ddx, ddy) || 1;
+                const spd = Math.hypot(b.vx, b.vy);
+                b.vx = (ddx / dd) * spd;
+                b.vy = (ddy / dd) * spd;
+              } else {
+                b.alive = false;
+              }
+              break;
+            }
             b.pierce -= 1;
             if (b.pierce < 0) {
               b.alive = false;
@@ -933,6 +1033,11 @@ export class Combat {
   private registerCombo() {
     this.comboCount += 1;
     this.comboTimer = COMBO_WINDOW;
+    if ((this.perks.momentum ?? 0) > 0) this.momentumT = 1.4;
+    if ((this.perks.echo ?? 0) > 0 && Math.random() < 0.12 * (this.perks.echo ?? 0)) {
+      const n = this.nearestMob();
+      if (n) this.hurtCircle(n.x, n.y, 42, (this.base?.dmg ?? 8) * 0.8, true);
+    }
     if (this.comboCount > 0 && this.comboCount % COMBO_TRIGGER === 0) {
       this.overdriveT = OVERDRIVE_TIME;
       this.audio.overdrive();
@@ -941,6 +1046,7 @@ export class Combat {
   }
 
   private hurtMob(m: Mob, dmg: number, explode: number, crit = false) {
+    dmg *= m.boss ? 1 + 0.15 * (this.perks.thermal ?? 0) : 1;
     m.hp -= dmg;
     m.flash = 0.16;
     this.burst(m.x, m.y, m.boss ? 10 : 4, m.boss ? "#e8a070" : "#d8d0c4");
@@ -977,9 +1083,10 @@ export class Combat {
       const dx = m.x - x;
       const dy = m.y - y;
       if (dx * dx + dy * dy < (r + m.r) * (r + m.r)) {
-        m.hp -= dmg;
+        const dmg2 = dmg * (m.boss ? 1 + 0.15 * (this.perks.thermal ?? 0) : 1);
+        m.hp -= dmg2;
         m.flash = 0.14;
-        this.spawnFloat(m.x, m.y, Math.round(dmg).toString(), "#e8a070");
+        this.spawnFloat(m.x, m.y, Math.round(dmg2).toString(), "#e8a070");
         if (m.hp <= 0) {
           m.alive = false;
           this.kills += 1;
@@ -994,9 +1101,12 @@ export class Combat {
   }
 
   private dropFrom(m: Mob) {
+    const salvage = this.perks.salvage ?? 0;
     this.drop("xp", m.x, m.y, m.xp);
     if (Math.random() < 0.04) this.drop("hp", m.x + 8, m.y, 18);
-    if (Math.random() < 0.03) this.drop("credit", m.x - 8, m.y, 8 + Math.floor(Math.random() * 12));
+    if (Math.random() < 0.03 + 0.015 * salvage) {
+      this.drop("credit", m.x - 8, m.y, 8 + Math.floor(Math.random() * 12) + 3 * salvage);
+    }
     if (Math.random() < 0.012) this.drop("key", m.x, m.y + 10, 1);
   }
 
@@ -1067,7 +1177,7 @@ export class Combat {
 
   private damagePlayer(raw: number) {
     if (this.invuln > 0) return;
-    let dmg = raw;
+    let dmg = Math.max(0.5, raw - 1.4 * (this.perks.barrier ?? 0));
     if (this.shield > 0) dmg *= 0.2;
     this.hp -= dmg;
     this.invuln = 0.45;

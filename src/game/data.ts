@@ -89,6 +89,57 @@ export const MECHS: MechDef[] = [
     },
     handling: { accel: 9, brake: 6, weave: 34 },
   },
+  {
+    id: "storm",
+    name: "Storm Warden",
+    role: "Support",
+    blurb: "Chain-lightning zapper. Every bolt jumps to the next closest hull.",
+    unlockCost: 2500,
+    color: "#c8d8f0",
+    accent: "#4ad8ff",
+    stats: { hp: 104, speed: 214, fireRate: 3.8, damage: 11, range: 320 },
+    weapon: "arc",
+    skill: {
+      name: "Overload Pulse",
+      cooldown: 10,
+      desc: "A discharge ring that damages nearby hulls and briefly overdrives you.",
+    },
+    handling: { accel: 10, brake: 7 },
+  },
+  {
+    id: "vulture",
+    name: "Iron Vulture",
+    role: "Bomber",
+    blurb: "Lobs slow mortar shells that always detonate. Punishes standing still.",
+    unlockCost: 3200,
+    color: "#5c5a48",
+    accent: "#c46a2a",
+    stats: { hp: 132, speed: 182, fireRate: 1.6, damage: 30, range: 420 },
+    weapon: "mortar",
+    skill: {
+      name: "Payload Drop",
+      cooldown: 12.5,
+      desc: "Drops a five-shell spread that detonates in a wide arc.",
+    },
+    handling: { accel: 5, brake: 4 },
+  },
+  {
+    id: "cross",
+    name: "Solar Cross",
+    role: "Paladin",
+    blurb: "Piercing energy lance and a radiant ward. Holds ground, mends fast.",
+    unlockCost: 4000,
+    color: "#f0ece0",
+    accent: "#e8c84a",
+    stats: { hp: 128, speed: 200, fireRate: 2.8, damage: 24, range: 260 },
+    weapon: "lance",
+    skill: {
+      name: "Radiant Ward",
+      cooldown: 11,
+      desc: "Shields, heals, and knocks back everything close.",
+    },
+    handling: { accel: 7, brake: 8 },
+  },
 ];
 
 export const MECH_MAP: Record<MechId, MechDef> = Object.fromEntries(
@@ -111,6 +162,12 @@ export const PERKS: PerkDef[] = [
   { id: "range", name: "Long Lens", desc: "Weapon range +20%.", max: 3 },
   { id: "haste", name: "Coolant Loop", desc: "Skill cooldown −16%.", max: 3 },
   { id: "spread", name: "Wide Pattern", desc: "Projectile spread / melee arc +15%.", max: 3 },
+  { id: "thermal", name: "Thermal Lock", desc: "Damage vs bosses +15%.", max: 3 },
+  { id: "barrier", name: "Kinetic Barrier", desc: "Incoming damage −1.4, flat.", max: 4 },
+  { id: "momentum", name: "Momentum Drive", desc: "Kills grant a burst of speed.", max: 3 },
+  { id: "echo", name: "Echo Rounds", desc: "Kills have a chance to detonate nearby hulls.", max: 3 },
+  { id: "static", name: "Static Field", desc: "A damaging aura pulses around you.", max: 3 },
+  { id: "salvage", name: "Scrap Reclaimer", desc: "Credit drops from kills, better and more often.", max: 3 },
 ];
 
 export const PERK_MAP: Record<PerkId, PerkDef> = Object.fromEntries(
