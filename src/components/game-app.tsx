@@ -13,6 +13,7 @@ import {
   addLoot,
   equipItem,
   getSave,
+  getServerSave,
   recordRun,
   selectMech,
   spendKeys,
@@ -23,7 +24,7 @@ import {
 import type { GearItem, HudState, MechId, PerkId, RunResult } from "@/game/types";
 
 function useSave() {
-  return useSyncExternalStore(subscribeSave, getSave, getSave);
+  return useSyncExternalStore(subscribeSave, getSave, getServerSave);
 }
 
 type Screen = "hangar" | "combat" | "results";

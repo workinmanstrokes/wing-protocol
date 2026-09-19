@@ -64,6 +64,17 @@ export function getSave(): SaveData {
   return state;
 }
 
+/**
+ * useSyncExternalStore's getServerSnapshot. The server has no localStorage,
+ * so it always renders DEFAULT_SAVE — this must return the exact same thing
+ * on the client's hydration pass, or React logs a hydration mismatch for
+ * every returning player whose real save differs from the default. React
+ * swaps in the live getSave() snapshot right after hydration.
+ */
+export function getServerSave(): SaveData {
+  return DEFAULT_SAVE;
+}
+
 export function subscribeSave(fn: () => void): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
