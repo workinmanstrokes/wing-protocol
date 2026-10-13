@@ -8,7 +8,7 @@ import type { SaveData } from "./types";
 const STEP = 1 / 60;
 const MAX_ENEMY = 360;
 const MAX_BULLET = 720;
-const MAX_PICK = 220;
+const MAX_PICK = 420;
 const MAX_FX = 520;
 const MAX_FLOAT = 64;
 const MAX_RING = 48;
@@ -60,7 +60,33 @@ type Mob = {
   dashT: number;
   dashDX: number;
   dashDY: number;
+  elite: string;
+  phase: number;
+  shieldHp: number;
+  shieldMax: number;
+  aimX: number;
+  aimY: number;
 };
+
+type Hazard = { alive: boolean; x: number; y: number; r: number; t: number; max: number; dmg: number; color: string };
+type Uplink = { active: boolean; x: number; y: number; r: number; progress: number; need: number; timeLeft: number };
+
+export const SECTORS = [
+  { name: "SECTOR 1 · OUTER YARD", floor: "#14151a", grid: "94,200,232", hazard: 0 },
+  { name: "SECTOR 2 · ION STORM", floor: "#141822", grid: "143,208,255", hazard: 2.0 },
+  { name: "SECTOR 3 · REACTOR CORE", floor: "#1c1414", grid: "232,120,90", hazard: 1.5 },
+] as const;
+const SECTOR_LEN = 100;
+const BOSS_TIMES = [88, 188, 270];
+const UPLINK_TIMES = [40, 140, 228];
+const ELITE_MODS = ["swift", "armored", "volatile", "regen", "splitter"] as const;
+export const EVOLUTIONS = [
+  { id: "railstorm", name: "Railstorm", need: { pierce: 2, fork: 2 }, desc: "Shots pierce +2 and hit 25% harder." },
+  { id: "nova", name: "Nova Rounds", need: { explosive: 2, crit: 2 }, desc: "Crits detonate in a wide blast." },
+  { id: "hive", name: "Hive Swarm", need: { drone: 2, overclock: 2 }, desc: "+2 drones with homing fire." },
+  { id: "bloodline", name: "Bloodline Reactor", need: { vampire: 2, repair: 2 }, desc: "Siphon x2, kills drop repair cells." },
+  { id: "tempest", name: "Tempest Field", need: { static: 2, haste: 2 }, desc: "Static field doubles in size and power." },
+] as const;
 
 type Pick = {
   alive: boolean;
@@ -189,6 +215,7 @@ export class Combat {
     alive: false, kind: "drone", x: 0, y: 0, vx: 0, vy: 0, r: 14, hp: 1, maxHp: 1,
     speed: 40, baseSpeed: 40, dmg: 8, xp: 1, fireCd: 0, flash: 0, boss: false, touchCd: 0,
     special: 0, telegraph: 0, dashT: 0, dashDX: 0, dashDY: 0,
+    elite: "", phase: 0, shieldHp: 0, shieldMax: 0, aimX: 0, aimY: 0,
   }));
   private picks: Pick[] = pool(MAX_PICK, () => ({
     alive: false,
@@ -214,6 +241,14 @@ export class Combat {
   private announceT = 0;
   private momentumT = 0;
   private staticT = 0;
+  private sector = 0;
+  private hazardT = 4;
+  private hazards: Hazard[] = pool(40, () => ({ alive: false, x: 0, y: 0, r: 60, t: 0, max: 1, dmg: 10, color: "#8fd0ff" }));
+  private uplink: Uplink = { active: false, x: 0, y: 0, r: 90, progress: 0, need: 6, timeLeft: 0 };
+  private uplinkIdx = 0;
+  private uplinksWon = 0;
+  private bossIdx = 0;
+  private evo = new Set<string>();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -324,6 +359,15 @@ export class Combat {
     this.maxHp = this.base.hp;
     this.hp = Math.min(this.hp, this.maxHp);
     this.skillMax = MECH_MAP[this.mechId].skill.cooldown / this.base.skillHaste;
+    for (const e of EVOLUTIONS) {
+      if (this.evo.has(e.id)) continue;
+      if (Object.entries(e.need).every(([k, v]) => (this.perks[k] ?? 0) >= v)) {
+        this.evo.add(e.id);
+        this.announce(`EVOLVED · ${e.name.toUpperCase()}`, 2.6);
+        this.spawnRing(this.px, this.py, 160, 0.7, "#ffd166", 5);
+        this.audio.overdrive();
+      }
+    }
     this.leveling = false;
     this.checkLevel();
     this.pushHud();
@@ -334,7 +378,21 @@ export class Combat {
       getYaw: () => this.lastYaw,
       getSpeed: () => Math.hypot(this.pvx, this.pvy),
       setKeys: (codes: string[]) => this.input.setKeys(codes),
+      state: () => ({
+        time: this.time, hp: this.hp, kills: this.kills, level: this.level, sector: this.sector,
+        mobs: this.mobs.filter((m) => m.alive).length, bosses: this.bosses, evo: [...this.evo],
+        uplinks: this.uplinksWon, over: this.over, leveling: this.leveling, paused: this.paused, hitstop: this.hitstop,
+      }),
+      spawn: (n: number) => { for (let i = 0; i < n; i++) this.spawnMob(false); },
+      skipTo: (t: number) => { this.time = t; },
+      god: (v: boolean) => { this.godMode = v; },
     };
+  }
+  private godMode = false;
+
+  private announce(text: string, t = 2.4) {
+    this.announceText = text;
+    this.announceT = t;
   }
 
   private frame = (t: number) => {
@@ -381,8 +439,9 @@ export class Combat {
       this.staticT -= dt;
       if (this.staticT <= 0) {
         this.staticT = 0.6;
-        this.hurtCircle(this.px, this.py, 70, 2 + 2 * (this.perks.static ?? 0), false);
-        this.spawnRing(this.px, this.py, 70, 0.3, "#8fd0ff", 2);
+        const tem = this.evo.has("tempest") ? 2 : 1;
+        this.hurtCircle(this.px, this.py, 70 * tem, (2 + 2 * (this.perks.static ?? 0)) * tem, false);
+        this.spawnRing(this.px, this.py, 70 * tem, 0.3, "#8fd0ff", 2);
       }
     }
 
@@ -466,13 +525,24 @@ export class Combat {
       const n = 1 + (intensity > 0.4 ? 1 : 0) + (intensity > 0.75 ? 1 : 0);
       for (let i = 0; i < n; i++) this.spawnMob(false);
     }
-    if (this.time >= this.nextBossAt && this.time < MISSION_SECONDS - 8) {
+    if (this.bossIdx < BOSS_TIMES.length && this.time >= BOSS_TIMES[this.bossIdx]!) {
+      this.bossIdx += 1;
       this.spawnMob(true);
-      this.nextBossAt += 78;
     }
+    const sec = Math.min(2, Math.floor(this.time / SECTOR_LEN));
+    if (sec !== this.sector) {
+      this.sector = sec;
+      this.announce(SECTORS[sec]!.name, 2.8);
+      this.audio.bossAlert();
+      this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.1);
+    }
+    this.updateHazards(dt);
+    this.updateUplink(dt);
 
     this.updateMobs(dt, aimX, aimY);
+    void this.nextBossAt;
     this.updateBullets(dt);
+    this.flushNova();
     this.updatePicks(dt, stats.magnet);
     this.updateFx(dt);
     this.updateRings(dt);
@@ -559,7 +629,8 @@ export class Combat {
       b.r = r;
       b.dmg = stats.dmg * (isCrit ? 2.2 : 1) + extra;
       b.life = life;
-      b.pierce = pierce + (mech.weapon === "lance" ? 3 : 0);
+      b.pierce = pierce + (mech.weapon === "lance" ? 3 : 0) + (this.evo.has("railstorm") ? 2 : 0);
+      if (this.evo.has("railstorm")) b.dmg *= 1.25;
       b.friendly = true;
       b.homing = mech.weapon === "fang" ? 2.4 : 0;
       b.explode =
@@ -614,9 +685,9 @@ export class Combat {
         fireOne(baseAng + o, 560, 5, stats.range / 560);
       }
     }
-    const drones = this.perks.drone ?? 0;
+    const drones = (this.perks.drone ?? 0) + (this.evo.has("hive") ? 2 : 0);
     for (let d = 0; d < drones; d++) {
-      const a = this.time * 2.4 + d * Math.PI;
+      const a = this.time * 2.4 + (d * Math.PI * 2) / drones;
       const ox = this.px + Math.cos(a) * 42;
       const oy = this.py + Math.sin(a) * 42;
       const b = this.bullets.find((x) => !x.alive);
@@ -631,7 +702,7 @@ export class Combat {
       b.life = 0.7;
       b.pierce = 0;
       b.friendly = true;
-      b.homing = 0;
+      b.homing = this.evo.has("hive") ? 3 : 0;
       b.explode = 0;
       b.color = "#c5cdd6";
       b.crit = false;
@@ -774,43 +845,67 @@ export class Combat {
     }
   }
 
-  private spawnMob(boss: boolean) {
+  private spawnMob(boss: boolean, kindOverride?: string, at?: { x: number; y: number }) {
     const m = this.mobs.find((x) => !x.alive);
     if (!m) return;
     const ang = Math.random() * Math.PI * 2;
     const dist = 520 + Math.random() * 180;
-    m.x = this.px + Math.cos(ang) * dist;
-    m.y = this.py + Math.sin(ang) * dist;
+    m.x = at ? at.x : this.px + Math.cos(ang) * dist;
+    m.y = at ? at.y : this.py + Math.sin(ang) * dist;
     m.x = Math.max(30, Math.min(WORLD - 30, m.x));
     m.y = Math.max(30, Math.min(WORLD - 30, m.y));
     const t = this.time / MISSION_SECONDS;
-    const scale = 1 + t * 1.8;
+    const scale = 1 + t * 1.9;
+    m.elite = "";
+    m.phase = 0;
+    m.shieldHp = 0;
+    m.shieldMax = 0;
+    m.boss = boss;
     if (boss) {
-      const ace = this.bosses % 2 === 1;
-      m.kind = ace ? "ace" : "titan";
-      m.r = ace ? 28 : 36;
-      m.hp = (ace ? 420 : 520) * scale;
-      m.speed = ace ? 150 : 88;
-      m.dmg = ace ? 22 : 26;
-      m.xp = ace ? 48 : 42;
-      m.boss = true;
+      const kind = (["titan", "ace", "warden"] as const)[Math.min(2, this.bosses)]!;
+      m.kind = kind;
+      m.r = kind === "warden" ? 40 : kind === "ace" ? 28 : 36;
+      m.hp = (kind === "warden" ? 1500 : kind === "ace" ? 620 : 600) * scale;
+      m.speed = kind === "ace" ? 150 : kind === "warden" ? 52 : 88;
+      m.dmg = kind === "warden" ? 24 : kind === "ace" ? 22 : 26;
+      m.xp = kind === "warden" ? 90 : 48;
       m.fireCd = 1.2;
-      m.special = ace ? 3.2 : 4;
+      m.special = kind === "ace" ? 3.2 : 4;
       this.bosses += 1;
-      this.announceText = ace ? "ACE INBOUND" : "TITAN BREACH";
-      this.announceT = 2.4;
+      this.announce(kind === "warden" ? "CORE WARDEN AWAKENS" : kind === "ace" ? "ACE INBOUND" : "TITAN BREACH");
       this.audio.bossAlert();
     } else {
-      const roll = Math.random();
-      const kind = t > 0.55 && roll < 0.22 ? "crawler" : t > 0.22 && roll < 0.5 ? "walker" : "drone";
+      let kind = kindOverride;
+      if (!kind) {
+        const r = Math.random();
+        const sec = this.sector;
+        if (sec === 0) kind = t > 0.12 && r < 0.18 ? "swarm" : t > 0.2 && r < 0.42 ? "walker" : r < 0.5 && t > 0.25 ? "charger" : "drone";
+        else if (sec === 1) kind = r < 0.16 ? "swarm" : r < 0.3 ? "charger" : r < 0.42 ? "sniper" : r < 0.6 ? "walker" : r < 0.68 ? "shielder" : "drone";
+        else kind = r < 0.14 ? "swarm" : r < 0.26 ? "charger" : r < 0.38 ? "sniper" : r < 0.5 ? "shielder" : r < 0.66 ? "crawler" : r < 0.8 ? "walker" : "drone";
+        if (kind === "swarm") {
+          for (let i = 0; i < 5; i++) this.spawnMob(false, "swarm", { x: m.x + (Math.random() - 0.5) * 60, y: m.y + (Math.random() - 0.5) * 60 });
+        }
+      }
       m.kind = kind;
-      m.boss = false;
-      if (kind === "drone") {
-        m.r = 12; m.hp = 14 * scale; m.speed = 118 + t * 40; m.dmg = 8; m.xp = 1; m.fireCd = 99;
-      } else if (kind === "walker") {
-        m.r = 16; m.hp = 32 * scale; m.speed = 86; m.dmg = 12; m.xp = 3; m.fireCd = 1.8;
-      } else {
-        m.r = 22; m.hp = 70 * scale; m.speed = 58; m.dmg = 18; m.xp = 8; m.fireCd = 2.4;
+      const S: Record<string, [number, number, number, number, number, number]> = {
+        // r, hp, speed, dmg, xp, fireCd
+        drone: [12, 14, 118 + t * 40, 8, 1, 99],
+        walker: [16, 32, 86, 12, 3, 1.8],
+        crawler: [22, 70, 58, 18, 8, 2.4],
+        swarm: [8, 6, 168 + t * 30, 5, 1, 99],
+        charger: [15, 40, 70, 16, 4, 99],
+        sniper: [14, 26, 96, 10, 5, 2.6],
+        shielder: [18, 46, 64, 14, 7, 99],
+      };
+      const d = S[kind] ?? S.drone!;
+      m.r = d[0]; m.hp = d[1] * scale; m.speed = d[2]; m.dmg = d[3] * (1 + t * 1.1); m.xp = d[4]; m.fireCd = d[5];
+      if (kind === "charger") m.special = 1.5 + Math.random() * 2;
+      if (kind === "shielder") { m.shieldMax = 50 * scale; m.shieldHp = m.shieldMax; }
+      const eliteChance = t < 0.15 ? 0 : 0.05 + t * 0.14;
+      if (kind !== "swarm" && Math.random() < eliteChance) {
+        m.elite = ELITE_MODS[Math.floor(Math.random() * ELITE_MODS.length)]!;
+        m.hp *= 3.2; m.r *= 1.25; m.xp *= 5; m.dmg *= 1.25;
+        if (m.elite === "swift") m.speed *= 1.6;
       }
     }
     m.maxHp = m.hp;
@@ -822,7 +917,98 @@ export class Combat {
     m.baseSpeed = m.speed;
     m.telegraph = 0;
     m.dashT = 0;
-    if (!boss) m.special = 0;
+    if (!boss && m.kind !== "charger") m.special = 0;
+  }
+
+  private enemyShot(x: number, y: number, ang: number, sp: number, r: number, dmg: number, homing = 0, color = "#e07060") {
+    const b = this.bullets.find((q) => !q.alive);
+    if (!b) return;
+    b.alive = true; b.x = x; b.y = y;
+    b.vx = Math.cos(ang) * sp; b.vy = Math.sin(ang) * sp;
+    b.r = r; b.dmg = dmg; b.life = 2.6; b.pierce = 0; b.friendly = false;
+    b.homing = homing; b.explode = 0; b.color = color; b.crit = false; b.chain = 0;
+  }
+
+  private bossPhase(m: Mob) {
+    const frac = m.hp / m.maxHp;
+    const want = m.kind === "warden" ? (frac < 0.3 ? 2 : frac < 0.65 ? 1 : 0) : frac < 0.5 ? 1 : 0;
+    if (want > m.phase) {
+      m.phase = want;
+      this.announce(`${m.kind.toUpperCase()} · PHASE ${want + 1}`, 1.8);
+      this.spawnRing(m.x, m.y, 220, 0.6, "#ff5a4a", 5);
+      this.trauma = Math.min(1, this.trauma + 0.5);
+      this.audio.bossAlert();
+      for (let i = 0; i < 16; i++) this.enemyShot(m.x, m.y, (i / 16) * Math.PI * 2, 200, 6, m.dmg * 0.6);
+      if (m.kind === "warden") for (let i = 0; i < 2 + want; i++) this.spawnMob(false, "shielder", { x: m.x + (i - 1) * 70, y: m.y + 80 });
+      if (m.kind === "ace") m.baseSpeed *= 1.2;
+    }
+  }
+
+  private spawnHazard(x: number, y: number, r: number, delay: number, dmg: number, color: string) {
+    const h = this.hazards.find((q) => !q.alive);
+    if (!h) return;
+    h.alive = true; h.x = x; h.y = y; h.r = r; h.t = delay; h.max = delay; h.dmg = dmg; h.color = color;
+  }
+
+  private updateHazards(dt: number) {
+    const cfg = SECTORS[this.sector]!;
+    if (cfg.hazard > 0) {
+      this.hazardT -= dt;
+      if (this.hazardT <= 0) {
+        this.hazardT = cfg.hazard * (0.7 + Math.random() * 0.6);
+        const n = this.sector === 2 ? 3 : 1;
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const d = i === 0 ? Math.random() * 90 : 120 + Math.random() * 200;
+          this.spawnHazard(this.px + Math.cos(a) * d + this.pvx * 0.6, this.py + Math.sin(a) * d + this.pvy * 0.6,
+            this.sector === 2 ? 80 : 70, 1.15, 14 + this.sector * 5, this.sector === 2 ? "#ff7a4a" : "#8fd0ff");
+        }
+      }
+    }
+    for (const h of this.hazards) {
+      if (!h.alive) continue;
+      h.t -= dt;
+      if (h.t <= 0) {
+        h.alive = false;
+        this.spawnRing(h.x, h.y, h.r, 0.35, h.color, 5);
+        this.burst(h.x, h.y, 14, h.color);
+        this.trauma = Math.min(1, this.trauma + 0.2);
+        this.hurtCircle(h.x, h.y, h.r, h.dmg * 1.5, false);
+        if (Math.hypot(this.px - h.x, this.py - h.y) < h.r + 12) this.damagePlayer(h.dmg);
+      }
+    }
+  }
+
+  private updateUplink(dt: number) {
+    const u = this.uplink;
+    if (!u.active && this.uplinkIdx < UPLINK_TIMES.length && this.time >= UPLINK_TIMES[this.uplinkIdx]!) {
+      this.uplinkIdx += 1;
+      const a = Math.random() * Math.PI * 2;
+      u.active = true;
+      u.x = Math.max(120, Math.min(WORLD - 120, this.px + Math.cos(a) * 420));
+      u.y = Math.max(120, Math.min(WORLD - 120, this.py + Math.sin(a) * 420));
+      u.progress = 0;
+      u.need = 6 + this.uplinkIdx;
+      u.timeLeft = 32;
+      this.announce("UPLINK DETECTED · HOLD THE ZONE", 2.4);
+      this.audio.level();
+    }
+    if (!u.active) return;
+    u.timeLeft -= dt;
+    if (Math.hypot(this.px - u.x, this.py - u.y) < u.r) u.progress += dt;
+    if (u.progress >= u.need) {
+      u.active = false;
+      this.uplinksWon += 1;
+      this.announce("UPLINK SECURED", 2);
+      this.spawnRing(u.x, u.y, 180, 0.6, "#7ae0a0", 5);
+      this.drop("chest", u.x, u.y, 1, this.uplinksWon >= 3 ? "legendary" : "epic");
+      this.drop("credit", u.x + 18, u.y, 50 + 25 * this.uplinksWon);
+      this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.25);
+      this.hurtCircle(u.x, u.y, 260, 60 + this.time * 0.6, true);
+    } else if (u.timeLeft <= 0) {
+      u.active = false;
+      this.announce("UPLINK LOST", 1.6);
+    }
   }
 
   private updateMobs(dt: number, _ax: number, _ay: number) {
@@ -892,8 +1078,56 @@ export class Combat {
           m.speed = m.baseSpeed * 3.2;
           m.special = 999;
           this.burst(m.x, m.y, 6, "#c4453a");
+          if (m.phase > 0) {
+            for (let i = 0; i < 2; i++) this.spawnMob(false, "swarm", { x: m.x, y: m.y });
+          }
         }
+      } else if (m.kind === "warden") {
+        chaseSpeed = dist > 260 ? m.speed : 0;
+        m.aimX += dt * (0.9 + m.phase * 0.5);
+        if (m.fireCd <= 0) {
+          m.fireCd = m.phase === 2 ? 0.16 : 0.24;
+          const arms = 2 + m.phase;
+          for (let i = 0; i < arms; i++) this.enemyShot(m.x, m.y, m.aimX + (i / arms) * Math.PI * 2, 170, 6, m.dmg * 0.55, 0, "#ff9a5a");
+        }
+        if (m.special <= 0) {
+          m.special = 5 - m.phase;
+          for (let i = 0; i < 3 + m.phase * 2; i++) {
+            this.spawnHazard(this.px + (Math.random() - 0.5) * 260, this.py + (Math.random() - 0.5) * 260, 64, 1.1, 18, "#ff5a4a");
+          }
+        }
+      } else if (m.kind === "charger") {
+        m.special -= dt;
+        if (m.dashT > 0) {
+          m.dashT = Math.max(0, m.dashT - dt);
+          if (m.dashT === 0) { m.speed = m.baseSpeed; m.special = 2.4 + Math.random() * 1.5; }
+        } else if (m.telegraph > 0) {
+          chaseSpeed = 0;
+          m.telegraph = Math.max(0, m.telegraph - dt);
+          if (m.telegraph === 0) {
+            m.dashT = 0.5; m.dashDX = m.aimX; m.dashDY = m.aimY; m.speed = m.baseSpeed * 5.2;
+          }
+        } else if (m.special <= 0 && dist < 420) {
+          m.telegraph = 0.6; m.aimX = dx; m.aimY = dy; m.special = 999;
+        }
+      } else if (m.kind === "sniper") {
+        if (dist < 300) chaseSpeed = -m.speed * 0.8;
+        else if (dist < 420) chaseSpeed = 0;
+        if (m.telegraph > 0) {
+          m.telegraph = Math.max(0, m.telegraph - dt);
+          if (m.telegraph === 0) {
+            this.enemyShot(m.x, m.y, Math.atan2(m.aimY, m.aimX), 640, 5, m.dmg * 1.4, 0, "#ff4a6a");
+            m.fireCd = 2.8;
+          } else { m.aimX = dx; m.aimY = dy; }
+        } else if (m.fireCd <= 0 && dist < 640) {
+          m.telegraph = 0.85; m.aimX = dx; m.aimY = dy;
+        }
+      } else if (m.kind === "shielder") {
+        if (m.shieldHp < m.shieldMax) m.shieldHp = Math.min(m.shieldMax, m.shieldHp + dt * m.shieldMax * 0.12);
       }
+      if (m.elite === "regen") m.hp = Math.min(m.maxHp, m.hp + m.maxHp * 0.035 * dt);
+      if (m.boss) this.bossPhase(m);
+      if (m.kind === "titan" && m.phase > 0 && m.telegraph === 0 && m.special > 2.2) m.special = 2.2;
 
       let sx = 0;
       let sy = 0;
@@ -940,7 +1174,7 @@ export class Combat {
         this.damagePlayer(m.dmg);
         m.touchCd = 0.55;
       }
-      if (m.fireCd <= 0 && (m.kind === "walker" || m.kind === "crawler" || m.boss) && dist < 620) {
+      if (m.fireCd <= 0 && (m.kind === "walker" || m.kind === "crawler" || m.kind === "titan" || m.kind === "ace") && dist < 620) {
         m.fireCd = m.boss ? 1.05 : m.kind === "crawler" ? 2.2 : 1.7;
         const b = this.bullets.find((x) => !x.alive);
         if (b) {
@@ -1045,36 +1279,73 @@ export class Combat {
     }
   }
 
-  private hurtMob(m: Mob, dmg: number, explode: number, crit = false) {
+  private hurtMob(m: Mob, dmg: number, explode: number, crit = false, quiet = false) {
     dmg *= m.boss ? 1 + 0.15 * (this.perks.thermal ?? 0) : 1;
+    if (m.elite === "armored") dmg *= 0.55;
+    if (m.shieldHp > 0) {
+      const absorbed = Math.min(m.shieldHp, dmg * 0.8);
+      m.shieldHp -= absorbed;
+      dmg -= absorbed;
+      if (m.shieldHp <= 0) { this.spawnRing(m.x, m.y, m.r + 18, 0.3, "#8fd0ff", 3); m.shieldHp = -m.shieldMax * 0.6; }
+    }
     m.hp -= dmg;
     m.flash = 0.16;
-    this.burst(m.x, m.y, m.boss ? 10 : 4, m.boss ? "#e8a070" : "#d8d0c4");
-    this.spawnFloat(m.x, m.y, Math.round(dmg).toString(), crit ? "#ffd166" : "#e8e0c8", crit);
-    if (m.hp <= 0) {
-      m.alive = false;
-      this.kills += 1;
-      this.registerCombo();
-      this.audio.death();
-      this.dropFrom(m);
-      if ((this.perks.vampire ?? 0) > 0) {
-        this.hp = Math.min(this.maxHp, this.hp + 1.6 * (this.perks.vampire ?? 0) * (m.boss ? 6 : 1));
-      }
-      if (explode > 0) this.hurtCircle(m.x, m.y, explode, dmg * 0.6, false);
-      if (m.boss) {
-        this.trauma = Math.min(1, this.trauma + 0.55);
-        this.hitstop = 0.07;
-        this.spawnRing(m.x, m.y, 100, 0.65, "#ff8a5c", 4);
-        this.drop("chest", m.x, m.y, 1, Math.random() < 0.45 ? "legendary" : "epic");
-        this.drop("key", m.x + 16, m.y, 1);
-        this.drop("credit", m.x - 16, m.y, 40);
-      } else {
-        this.spawnRing(m.x, m.y, 28, 0.32, "#d8d0c4", 2);
-      }
-      this.checkLevel();
-    } else {
-      this.audio.hit();
+    if (!quiet) this.burst(m.x, m.y, m.boss ? 10 : 4, m.boss ? "#e8a070" : "#d8d0c4");
+    this.spawnFloat(m.x, m.y, Math.round(dmg).toString(), crit ? "#ffd166" : quiet ? "#e8a070" : "#e8e0c8", crit);
+    if (crit && this.evo.has("nova")) {
+      this.spawnRing(m.x, m.y, 64, 0.25, "#ffd166", 3);
+      this.novaQueue.push(m.x, m.y, dmg * 0.7, 64);
     }
+    if (m.hp <= 0) this.killMob(m, explode, dmg);
+    else if (!quiet) this.audio.hit();
+  }
+
+  private novaQueue: number[] = [];
+
+  private killMob(m: Mob, explode: number, dmg: number) {
+    m.alive = false;
+    this.kills += 1;
+    this.registerCombo();
+    this.audio.death();
+    this.dropFrom(m);
+    const vamp = this.perks.vampire ?? 0;
+    if (vamp > 0) {
+      const k = this.evo.has("bloodline") ? 2 : 1;
+      this.hp = Math.min(this.maxHp, this.hp + 1.6 * vamp * k * (m.boss ? 6 : 1));
+      if (k === 2 && Math.random() < 0.06) this.drop("hp", m.x, m.y + 8, 10);
+    }
+    if (explode > 0) this.novaQueue.push(m.x, m.y, dmg * 0.6, explode);
+    if (m.elite) {
+      if (Math.random() < 0.1) this.drop("chest", m.x, m.y, 1);
+      this.drop("credit", m.x + 10, m.y, 12);
+      if (m.elite === "volatile") this.spawnHazard(m.x, m.y, 90, 0.6, m.dmg, "#ff7a4a");
+      if (m.elite === "splitter") for (let i = 0; i < 4; i++) this.spawnMob(false, "swarm", { x: m.x + (i - 1.5) * 16, y: m.y });
+    }
+    if (m.boss) {
+      this.trauma = Math.min(1, this.trauma + 0.55);
+      this.hitstop = 0.07;
+      this.spawnRing(m.x, m.y, 100, 0.65, "#ff8a5c", 4);
+      this.announce(`${m.kind.toUpperCase()} DOWN`, 2);
+      this.drop("chest", m.x, m.y, 1, Math.random() < 0.45 || m.kind === "warden" ? "legendary" : "epic");
+      this.drop("key", m.x + 16, m.y, 1);
+      this.drop("credit", m.x - 16, m.y, m.kind === "warden" ? 120 : 40);
+      this.drop("hp", m.x, m.y + 18, 40);
+      for (const q of this.picks) if (q.alive && q.kind === "xp") { this.xp += q.value; q.alive = false; }
+    } else {
+      this.spawnRing(m.x, m.y, m.elite ? 50 : 28, 0.32, m.elite ? "#ffd166" : "#d8d0c4", 2);
+    }
+    this.checkLevel();
+  }
+
+  private flushNova() {
+    // queued area hits are resolved after the bullet loop to avoid recursive chain explosions
+    let guard = 0;
+    while (this.novaQueue.length && guard++ < 40) {
+      const q = this.novaQueue.splice(0, 4);
+      const [x, y, d, r] = q as [number, number, number, number];
+      this.hurtCircle(x, y, r, d, false);
+    }
+    this.novaQueue.length = 0;
   }
 
   private hurtCircle(x: number, y: number, r: number, dmg: number, flash: boolean) {
@@ -1082,20 +1353,7 @@ export class Combat {
       if (!m.alive) continue;
       const dx = m.x - x;
       const dy = m.y - y;
-      if (dx * dx + dy * dy < (r + m.r) * (r + m.r)) {
-        const dmg2 = dmg * (m.boss ? 1 + 0.15 * (this.perks.thermal ?? 0) : 1);
-        m.hp -= dmg2;
-        m.flash = 0.14;
-        this.spawnFloat(m.x, m.y, Math.round(dmg2).toString(), "#e8a070");
-        if (m.hp <= 0) {
-          m.alive = false;
-          this.kills += 1;
-          this.registerCombo();
-          this.dropFrom(m);
-          this.spawnRing(m.x, m.y, m.boss ? 100 : 26, m.boss ? 0.65 : 0.3, "#e8a070", m.boss ? 4 : 2);
-          this.checkLevel();
-        }
-      }
+      if (dx * dx + dy * dy < (r + m.r) * (r + m.r)) this.hurtMob(m, dmg, 0, false, true);
     }
     if (flash) this.burst(x, y, 18, "#e8e0c8");
   }
@@ -1111,7 +1369,19 @@ export class Combat {
   }
 
   private drop(kind: Pick["kind"], x: number, y: number, value: number, floor?: Pick["floor"]) {
-    const p = this.picks.find((q) => !q.alive);
+    let p = this.picks.find((q) => !q.alive);
+    if (!p && kind === "xp") {
+      // pool full: fold into the farthest gem so XP is never lost
+      let far: Pick | null = null;
+      let fd = -1;
+      for (const q of this.picks) {
+        if (q.kind !== "xp") continue;
+        const d = (q.x - this.px) ** 2 + (q.y - this.py) ** 2;
+        if (d > fd) { fd = d; far = q; }
+      }
+      if (far) far.value += value;
+      return;
+    }
     if (!p) return;
     p.alive = true;
     p.kind = kind;
@@ -1176,7 +1446,7 @@ export class Combat {
   }
 
   private damagePlayer(raw: number) {
-    if (this.invuln > 0) return;
+    if (this.invuln > 0 || this.godMode) return;
     let dmg = Math.max(0.5, raw - 1.4 * (this.perks.barrier ?? 0));
     if (this.shield > 0) dmg *= 0.2;
     this.hp -= dmg;
@@ -1271,6 +1541,7 @@ export class Combat {
       50 +
       this.kills * 2 +
       this.bosses * 90 +
+      this.uplinksWon * 60 +
       this.creditsGot +
       (survived ? 220 : Math.floor(this.time * 0.4));
     const keys = this.keysGot + this.bosses + (survived ? 1 : 0);
@@ -1284,6 +1555,9 @@ export class Combat {
       keys,
       loot: this.loot,
       bosses: this.bosses,
+      sector: this.sector + 1,
+      uplinks: this.uplinksWon,
+      evolutions: EVOLUTIONS.filter((e) => this.evo.has(e.id)).map((e) => e.name),
     };
     this.hooks.onOver(result);
     this.pushHud();
@@ -1331,6 +1605,7 @@ export class Combat {
       drawWreck(ctx, wr.seed);
       ctx.restore();
     }
+    this.drawObjectives(ctx);
     for (const p of this.picks) {
       if (!p.alive) continue;
       ctx.save();
@@ -1366,16 +1641,48 @@ export class Combat {
       ctx.fill();
     }
     for (const m of this.mobs) {
+      if (!m.alive || !(m.telegraph > 0)) continue;
+      if (m.kind === "sniper" || m.kind === "charger") {
+        const len = m.kind === "sniper" ? 700 : 260;
+        ctx.globalAlpha = 0.35 + 0.5 * Math.abs(Math.sin(this.time * 20));
+        ctx.strokeStyle = m.kind === "sniper" ? "#ff4a6a" : "#ffb040";
+        ctx.lineWidth = m.kind === "sniper" ? 1.5 : m.r * 1.6;
+        ctx.beginPath();
+        ctx.moveTo(m.x, m.y);
+        ctx.lineTo(m.x + m.aimX * len, m.y + m.aimY * len);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+    for (const m of this.mobs) {
       if (!m.alive) continue;
+      if (m.elite) {
+        ctx.strokeStyle = m.elite === "volatile" ? "#ff7a4a" : m.elite === "regen" ? "#7ae0a0" : m.elite === "armored" ? "#c5cdd6" : m.elite === "swift" ? "#8fd0ff" : "#d090ff";
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.6 + 0.3 * Math.sin(this.time * 6);
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, m.r + 7, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      if (m.shieldHp > 0) {
+        ctx.fillStyle = `rgba(143,208,255,${0.08 + 0.18 * (m.shieldHp / m.shieldMax)})`;
+        ctx.strokeStyle = "rgba(143,208,255,0.7)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, m.r + 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
       ctx.save();
       ctx.translate(m.x, m.y);
       ctx.rotate(Math.atan2(this.py - m.y, this.px - m.x));
-      const sc = m.boss ? 1.35 : m.kind === "crawler" ? 1.15 : 1;
+      const sc = (m.boss ? (m.kind === "warden" ? 1.5 : 1.35) : m.kind === "crawler" ? 1.15 : 1) * (m.elite ? 1.25 : 1);
       ctx.scale(sc, sc);
       drawEnemyTop(ctx, m.kind, m.flash);
       ctx.restore();
       if (m.boss || m.hp < m.maxHp) {
-        const bw = m.boss ? 46 : 22;
+        const bw = m.boss ? 60 : m.elite ? 32 : 22;
         ctx.fillStyle = "#1a1a1c";
         ctx.fillRect(m.x - bw / 2, m.y - m.r - 10, bw, 3);
         ctx.fillStyle = m.boss ? "#c45c4a" : "#8a9a78";
@@ -1452,6 +1759,7 @@ export class Combat {
       ctx.globalAlpha = 1;
     }
     ctx.restore();
+    this.drawUplinkHud(ctx, w, h);
     this.drawMinimap(ctx, w);
     this.drawAnnounce(ctx, w);
     this.drawVignette(ctx, w, h);
@@ -1459,6 +1767,73 @@ export class Combat {
       ctx.fillStyle = "rgba(9,9,11,0.45)";
       ctx.fillRect(0, 0, w, h);
     }
+  }
+
+  private drawObjectives(ctx: CanvasRenderingContext2D) {
+    for (const hz of this.hazards) {
+      if (!hz.alive) continue;
+      const k = 1 - hz.t / hz.max;
+      ctx.globalAlpha = 0.12 + 0.25 * k;
+      ctx.fillStyle = hz.color;
+      ctx.beginPath();
+      ctx.arc(hz.x, hz.y, hz.r * k, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.8;
+      ctx.strokeStyle = hz.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(hz.x, hz.y, hz.r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    const u = this.uplink;
+    if (!u.active) return;
+    const pulse = 0.5 + 0.5 * Math.sin(this.time * 4);
+    ctx.fillStyle = `rgba(122,224,160,${0.06 + pulse * 0.06})`;
+    ctx.strokeStyle = "rgba(122,224,160,0.8)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 8]);
+    ctx.beginPath();
+    ctx.arc(u.x, u.y, u.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(u.x, u.y, u.r + 8, -Math.PI / 2, -Math.PI / 2 + (u.progress / u.need) * Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#7ae0a0";
+    ctx.fillRect(u.x - 6, u.y - 14, 12, 28);
+    ctx.fillRect(u.x - 14, u.y - 4, 28, 8);
+  }
+
+  private drawUplinkHud(ctx: CanvasRenderingContext2D, w: number, h: number) {
+    const u = this.uplink;
+    if (!u.active) return;
+    const dx = u.x - this.camX;
+    const dy = u.y - this.camY;
+    if (Math.abs(dx) > w / 2 - 20 || Math.abs(dy) > h / 2 - 20) {
+      const a = Math.atan2(dy, dx);
+      const rx = w / 2 - 34;
+      const ry = h / 2 - 140;
+      const t = Math.min(rx / Math.abs(Math.cos(a) || 1e-6), ry / Math.abs(Math.sin(a) || 1e-6));
+      ctx.save();
+      ctx.translate(w / 2 + Math.cos(a) * t, h / 2 + Math.sin(a) * t);
+      ctx.rotate(a);
+      ctx.fillStyle = "#7ae0a0";
+      ctx.beginPath();
+      ctx.moveTo(14, 0);
+      ctx.lineTo(-8, -9);
+      ctx.lineTo(-8, 9);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.font = "bold 13px sans-serif";
+    ctx.fillStyle = "#7ae0a0";
+    ctx.fillText(`UPLINK ${Math.floor((u.progress / u.need) * 100)}% · ${Math.ceil(u.timeLeft)}s`, w / 2, h - 150);
+    ctx.restore();
   }
 
   private drawMinimap(ctx: CanvasRenderingContext2D, w: number) {
@@ -1482,7 +1857,7 @@ export class Combat {
       if (d > range) continue;
       const mx = cx + dx * scale;
       const my = cy + dy * scale;
-      ctx.fillStyle = m.boss ? "#ff5a4a" : "#8a9a78";
+      ctx.fillStyle = m.boss ? "#ff5a4a" : m.elite ? "#ffd166" : "#8a9a78";
       ctx.beginPath();
       ctx.arc(mx, my, m.boss ? 3.4 : 1.7, 0, Math.PI * 2);
       ctx.fill();
@@ -1495,6 +1870,12 @@ export class Combat {
       if (d > range) continue;
       ctx.fillStyle = p.kind === "chest" ? "#e8c84a" : "#5ec8e8";
       ctx.fillRect(cx + dx * scale - 1, cy + dy * scale - 1, 2, 2);
+    }
+    if (this.uplink.active) {
+      const ux = Math.max(-range, Math.min(range, this.uplink.x - this.px)) * scale;
+      const uy = Math.max(-range, Math.min(range, this.uplink.y - this.py)) * scale;
+      ctx.fillStyle = "#7ae0a0";
+      ctx.fillRect(cx + ux - 3, cy + uy - 3, 6, 6);
     }
     ctx.fillStyle = MECH_MAP[this.mechId].accent;
     ctx.beginPath();
@@ -1542,10 +1923,11 @@ export class Combat {
     const y0 = camY - h / 2 - pad;
     const x1 = camX + w / 2 + pad;
     const y1 = camY + h / 2 + pad;
-    ctx.fillStyle = "#14151a";
+    const sec = SECTORS[this.sector]!;
+    ctx.fillStyle = sec.floor;
     ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
-    const pulse = 0.028 + Math.sin(this.time * 0.6) * 0.012;
-    ctx.strokeStyle = `rgba(94,200,232,${pulse})`;
+    const pulse = 0.03 + this.sector * 0.012 + Math.sin(this.time * 0.6) * 0.012;
+    ctx.strokeStyle = `rgba(${sec.grid},${pulse})`;
     ctx.lineWidth = 1;
     const tile = 96;
     const sx = Math.floor(x0 / tile) * tile;
@@ -1597,6 +1979,10 @@ declare global {
       getYaw: () => number;
       getSpeed: () => number;
       setKeys: (codes: string[]) => void;
+      state?: () => Record<string, unknown>;
+      spawn?: (n: number) => void;
+      skipTo?: (t: number) => void;
+      god?: (v: boolean) => void;
     };
   }
 }

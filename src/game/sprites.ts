@@ -514,13 +514,51 @@ export function drawEnemyTop(ctx: CanvasRenderingContext2D, id: string, flash = 
       plateGrad(ctx, -6, -6, 18, 12, "#3a2024", "#180d0f", "#c4453a", 2);
       glowDot(ctx, 4, 0, 2.4, "#ffb0a8", "#e04030");
       break;
+    case "swarm":
+      poly(ctx, [[-6, -5], [8, 0], [-6, 5], [-3, 0]], "#5a3a4a", "#d070a0");
+      glowDot(ctx, 2, 0, 1.4, "#ffc0e0", "#d070a0");
+      break;
+    case "charger":
+      poly(ctx, [[-12, -11], [16, -4], [20, 0], [16, 4], [-12, 11], [-8, 0]], "#4a3420", "#e8a040");
+      plateGrad(ctx, -6, -5, 14, 10, "#6a4a28", "#2a1c10", INK, 2);
+      glowDot(ctx, 14, 0, 2, "#ffe0a0", "#e8a040");
+      break;
+    case "sniper":
+      plateGrad(ctx, -10, -9, 16, 18, "#3a3048", "#1a1424", INK, 3);
+      ctx.strokeStyle = "#a890c8";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(4, 0);
+      ctx.lineTo(24, 0);
+      ctx.stroke();
+      glowDot(ctx, 24, 0, 1.6, "#ffd0e0", "#ff4a6a");
+      break;
+    case "shielder":
+      plateGrad(ctx, -14, -12, 24, 24, "#3a4a58", "#1a2430", INK, 4);
+      plateGrad(ctx, 10, -14, 6, 28, "#5a7a90", "#2a3a48", "#8fd0ff", 2);
+      glowDot(ctx, 0, 0, 2.4, "#d0f0ff", "#4a90c0");
+      break;
+    case "warden":
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        ctx.save();
+        ctx.rotate(a);
+        plateGrad(ctx, 18, -5, 12, 10, "#5a2a20", "#2a1210", "#ff7a4a", 2);
+        ctx.restore();
+      }
+      plateGrad(ctx, -20, -20, 40, 40, "#3a1c18", "#140a08", "#ff5a4a", 8);
+      glowDot(ctx, 0, 0, 6, "#ffd0a0", "#ff5a4a");
+      break;
     default:
       plate(ctx, -8, -8, 16, 16, "#666", INK, 2);
   }
   if (flash > 0) {
-    ctx.globalAlpha = Math.min(0.7, flash);
+    ctx.globalAlpha = Math.min(0.75, flash * 4);
+    ctx.globalCompositeOperation = "lighter";
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(-24, -24, 48, 48);
+    ctx.beginPath();
+    ctx.arc(0, 0, 20, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.restore();
 }
@@ -534,7 +572,8 @@ export function drawPortrait(ctx: CanvasRenderingContext2D, id: MechId, w: numbe
   ctx.fillRect(0, 0, w, h);
   ctx.save();
   ctx.translate(w * 0.5, h * 0.58);
-  ctx.scale(w / 90, w / 90);
+  const k = Math.min(w, h * 1.2) / 90;
+  ctx.scale(k, k);
   ctx.rotate(-0.5);
   drawMechTop(ctx, id);
   ctx.restore();

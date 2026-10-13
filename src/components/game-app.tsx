@@ -116,8 +116,9 @@ export function GameApp() {
             <LevelUp
               choices={choices}
               onPick={(id) => {
-                combatRef.current?.choosePerk(id);
+                // clear first: choosePerk may immediately queue the next level-up
                 setChoices(null);
+                combatRef.current?.choosePerk(id);
               }}
             />
           )}
@@ -208,14 +209,14 @@ function Hangar({
       </nav>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
-        {tab === "bay" && <Bay onDeploy={onDeploy} />}
+        {tab === "bay" && <Bay />}
         {tab === "armory" && <Armory />}
         {tab === "vault" && <Vault onLoot={setLootFlash} />}
       </div>
 
       {tab === "bay" && (
-        <div className="border-t border-border bg-surface px-4 py-3 sm:hidden">
-          <Button className="w-full" onClick={onDeploy}>
+        <div className="border-t border-border bg-surface px-4 py-3">
+          <Button className="mx-auto flex w-full max-w-md" onClick={onDeploy}>
             Deploy {mech.name}
           </Button>
         </div>
@@ -246,7 +247,7 @@ function Hangar({
   );
 }
 
-function Bay({ onDeploy }: { onDeploy: () => void }) {
+function Bay() {
   const save = useSave();
   const [view, setView] = useState<MechId>(save.selected);
   const selected = MECH_MAP[view];
@@ -258,8 +259,13 @@ function Bay({ onDeploy }: { onDeploy: () => void }) {
 
   return (
     <div className="mx-auto grid max-w-6xl gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-      <div>
-        <div className="flex gap-2 overflow-x-auto pb-2">
+      <div className="min-w-0">
+        <div className="mb-1 flex items-center justify-between text-[11px] uppercase tracking-wider text-muted sm:hidden">
+          <span>Hangar · {MECHS.length} mechs</span>
+          <span aria-hidden>Swipe →</span>
+        </div>
+        <div className="relative">
+        <div className="flex snap-x gap-2 overflow-x-auto pb-2 pr-10" data-testid="mech-row">
           {MECHS.map((m) => {
             const locked = !save.unlocked.includes(m.id);
             const on = view === m.id;
@@ -272,7 +278,7 @@ function Bay({ onDeploy }: { onDeploy: () => void }) {
                   if (!locked) selectMech(m.id);
                 }}
                 className={cn(
-                  "w-[7.5rem] shrink-0 rounded-lg border p-2 text-left",
+                  "w-[7.5rem] shrink-0 snap-start rounded-lg border p-2 text-left",
                   on ? "border-accent bg-elevated" : "border-border bg-surface",
                   locked && "opacity-55",
                 )}
@@ -285,6 +291,8 @@ function Bay({ onDeploy }: { onDeploy: () => void }) {
               </button>
             );
           })}
+        </div>
+        <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-bg to-transparent" />
         </div>
 
         <div className="mt-4 overflow-hidden rounded-xl border border-border bg-surface">
@@ -317,11 +325,7 @@ function Bay({ onDeploy }: { onDeploy: () => void }) {
                 >
                   Unlock — {selected.unlockCost} credits
                 </Button>
-              ) : (
-                <Button className="mt-5 hidden sm:inline-flex" onClick={onDeploy}>
-                  Deploy {selected.name}
-                </Button>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
@@ -602,6 +606,7 @@ function LevelUp({ choices, onPick }: { choices: PerkId[]; onPick: (id: PerkId) 
               <button
                 key={id}
                 type="button"
+                data-perk={id}
                 onClick={() => onPick(id)}
                 className="min-h-28 rounded-xl border border-border bg-surface p-5 text-left hover:border-accent"
               >
@@ -659,7 +664,14 @@ function Results({
           <Stat label="Bosses" value={`${result.bosses}`} />
           <Stat label="Credits" value={`+${result.credits}`} />
           <Stat label="Keys" value={`+${result.keys}`} />
+          <Stat label="Sector" value={`${result.sector ?? 1}/3`} />
+          <Stat label="Uplinks" value={`${result.uplinks ?? 0}/3`} />
         </dl>
+        {result.evolutions && result.evolutions.length > 0 && (
+          <p className="mt-3 text-sm text-muted">
+            Evolved: <span className="text-fg">{result.evolutions.join(", ")}</span>
+          </p>
+        )}
         {result.loot.length > 0 && (
           <div className="mt-4">
             <p className="text-[11px] uppercase tracking-wider text-muted">Salvage</p>
