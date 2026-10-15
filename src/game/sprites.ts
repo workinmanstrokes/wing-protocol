@@ -592,8 +592,9 @@ export function drawPortrait(ctx: CanvasRenderingContext2D, id: MechId, w: numbe
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
   ctx.save();
-  ctx.translate(w * 0.5, h * 0.58);
-  const k = Math.min(w, h * 1.2) / 90;
+  ctx.translate(w * 0.5, h * 0.52);
+  // mecha sprites span roughly ±40px incl. weapons/wings; fit with a margin
+  const k = Math.min(w, h) / 92;
   ctx.scale(k, k);
   ctx.rotate(-0.5);
   drawMechTop(ctx, id);
