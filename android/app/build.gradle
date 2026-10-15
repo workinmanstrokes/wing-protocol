@@ -7,8 +7,8 @@ android {
         applicationId "com.diddlerrr.wingprotocol"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode (System.getenv("VERSION_CODE") ?: "1").toInteger()
-        versionName System.getenv("VERSION_NAME") ?: "0.1.0"
+        versionCode = Integer.parseInt(System.getenv("VERSION_CODE") ?: "1")
+        versionName = System.getenv("VERSION_NAME") ?: "0.1.0"
         ndk {
             // No native code today; if a plugin adds .so files, ship 64-bit only.
             abiFilters "arm64-v8a", "x86_64"
