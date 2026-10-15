@@ -49,6 +49,31 @@ export function GameApp() {
     audioRef.current.setMuted(muted);
   }, [muted]);
 
+  // Android hardware back: pause in combat, back to hangar from results, exit from hangar.
+  const screenRef = useRef(screen);
+  screenRef.current = screen;
+  useEffect(() => {
+    let remove: (() => void) | undefined;
+    let cancelled = false;
+    void (async () => {
+      const { Capacitor } = await import("@capacitor/core");
+      if (!Capacitor.isNativePlatform() || cancelled) return;
+      const { App } = await import("@capacitor/app");
+      const h = await App.addListener("backButton", () => {
+        const sc = screenRef.current;
+        if (sc === "combat") combatRef.current?.pause(true);
+        else if (sc === "results") setScreen("hangar");
+        else void App.exitApp();
+      });
+      remove = () => void h.remove();
+      if (cancelled) remove();
+    })();
+    return () => {
+      cancelled = true;
+      remove?.();
+    };
+  }, []);
+
   useEffect(() => {
     if (screen !== "combat") {
       combatRef.current?.destroy();
