@@ -88,7 +88,7 @@ export const SECTORS = [
 const SECTOR_LEN = 100;
 /** Tight raster boxes per enemy sprite: smaller boxes = less overdraw on phones. */
 const MOB_BOX: Record<string, number> = {
-  swarm: 22, drone: 30, walker: 40, charger: 46, sniper: 54, shielder: 40, crawler: 60, titan: 72, ace: 66, warden: 84,
+  swarm: 22, drone: 32, walker: 48, charger: 52, sniper: 66, shielder: 48, crawler: 64, titan: 84, ace: 66, warden: 84,
 };
 const BOSS_TIMES = [88, 188, 270];
 const UPLINK_TIMES = [40, 140, 228];
@@ -1990,7 +1990,9 @@ export class Combat {
       ctx.stroke();
     }
     if (this.invuln > 0) ctx.globalAlpha = 0.55 + Math.sin(this.time * 30) * 0.2;
-    drawMechTop(ctx, this.mechId, this.invuln > 0 ? 0.3 : 0);
+    // cached cel-shaded sprite (clip-heavy vector art is too slow to redraw every frame)
+    const mechSpr = cachedSprite(`mech:${this.mechId}`, 104, (c) => drawMechTop(c, this.mechId, 0));
+    ctx.drawImage(mechSpr.c, -mechSpr.half, -mechSpr.half, mechSpr.half * 2, mechSpr.half * 2);
     ctx.restore();
     ctx.globalAlpha = 1;
     if (this.coils > 0) {
