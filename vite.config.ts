@@ -167,6 +167,9 @@ export default defineConfig(({ command, isPreview }) => ({
       ? [
           nitro({
             preset: "vercel",
+            // Vercel disabled Node 20 for new deployments on 2026-10-01; pin the
+            // function runtime so a local Node 20/22 build can't emit nodejs20.x.
+            vercel: { functions: { runtime: "nodejs24.x" } },
             // Auto-registers anything under server/middleware/*.
             serverDir: "./server",
           }),
