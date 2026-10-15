@@ -1,3 +1,4 @@
+import { getQualityPref, setQualityPref, type QualityPref } from "@/game/render";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import { KeyRound, Pause, Play, Volume2, VolumeX, Wallet } from "lucide-react";
@@ -98,7 +99,11 @@ export function GameApp() {
         />
       )}
       {screen === "combat" && (
-        <div className="relative h-full w-full">
+        <div
+          className="relative h-full w-full select-none"
+          onContextMenu={(e) => e.preventDefault()}
+          style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
+        >
           <canvas
             ref={canvasRef}
             className="block h-full w-full touch-none"
@@ -356,6 +361,7 @@ function Bay() {
         <p className="mt-2 text-xs text-subtle">
           Sorties {save.sorties} · Best kills {save.highKills}
         </p>
+        <GraphicsToggle className="mt-4" />
       </aside>
     </div>
   );
@@ -621,12 +627,50 @@ function LevelUp({ choices, onPick }: { choices: PerkId[]; onPick: (id: PerkId) 
   );
 }
 
+function GraphicsToggle({ className }: { className?: string }) {
+  const [pref, setPref] = useState<QualityPref>("auto");
+  useEffect(() => setPref(getQualityPref()), []);
+  const opts: { id: QualityPref; label: string }[] = [
+    { id: "auto", label: "Auto" },
+    { id: "high", label: "High" },
+    { id: "low", label: "Low" },
+  ];
+  return (
+    <div className={className}>
+      <p className="text-[11px] uppercase tracking-wider text-muted">Graphics</p>
+      <div role="radiogroup" aria-label="Graphics quality" className="mt-1 grid grid-cols-3 gap-1 rounded-lg border border-border bg-elevated p-1">
+        {opts.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            role="radio"
+            aria-checked={pref === o.id}
+            data-quality={o.id}
+            onClick={() => {
+              setPref(o.id);
+              setQualityPref(o.id);
+            }}
+            className={cn(
+              "min-h-10 rounded-md text-sm font-semibold",
+              pref === o.id ? "bg-accent text-accent-fg" : "text-muted",
+            )}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1 text-[11px] text-muted">Auto starts on High and drops to Low if the frame rate dips.</p>
+    </div>
+  );
+}
+
 function PauseMenu({ onResume, onQuit }: { onResume: () => void; onQuit: () => void }) {
   return (
     <div className="absolute inset-0 z-10 grid place-items-center bg-bg/70 p-4">
       <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-6">
         <h2 className="font-display text-2xl font-semibold">Paused</h2>
         <p className="mt-2 text-sm text-muted">The horde holds. Extract only from the hangar.</p>
+        <GraphicsToggle className="mt-5" />
         <div className="mt-5 flex flex-col gap-2">
           <Button onClick={onResume}>Resume</Button>
           <Button variant="secondary" onClick={onQuit}>
