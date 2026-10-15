@@ -1,7 +1,9 @@
 import { MISSION_SECONDS, MECH_MAP, PERKS, PERK_MAP, WORLD, xpForLevel, rollGear } from "./data";
 import { GameAudio } from "./audio";
 import { GameInput } from "./input";
-import { drawEnemyTop, drawMechTop, drawPickup, drawWreck } from "./sprites";
+import { drawEnemyTop, drawMechTop, drawObstacle, drawPickup } from "./sprites";
+import { MECH_BOOSTERS } from "./mecha";
+import { PACE_EVENTS, paceMultiplier, sectorLayout, type ObstacleKind } from "./levels";
 import type { GearItem, HudState, MechId, PerkId, RunResult } from "./types";
 import type { SaveData } from "./types";
 
@@ -150,7 +152,7 @@ type Float = {
   crit: boolean;
 };
 
-type Wreck = { x: number; y: number; r: number; seed: number };
+type Wreck = { x: number; y: number; r: number; seed: number; kind: ObstacleKind };
 
 export type CombatHooks = {
   onHud: (h: HudState) => void;
@@ -221,6 +223,8 @@ export class Combat {
   private camY = WORLD / 2;
   private hudT = 0;
   private spawnAcc = 0;
+  private paceIdx = 0;
+  private surgeT = 0;
   private nextBossAt = 48;
   private reduced = false;
   private wrecks: Wreck[] = [];
@@ -369,13 +373,39 @@ export class Combat {
   }
 
   private seedWrecks() {
-    for (let i = 0; i < 18; i++) {
-      const a = (i / 18) * Math.PI * 2;
-      const d = 380 + (i * 137) % 900;
-      const x = WORLD / 2 + Math.cos(a) * d + ((i * 91) % 140) - 70;
-      const y = WORLD / 2 + Math.sin(a) * d + ((i * 53) % 140) - 70;
-      this.wrecks.push({ x, y, r: 28, seed: i * 0.7 });
+    this.wrecks = sectorLayout(this.sector, this.px, this.py, WORLD);
+  }
+
+  /** Scripted pacing beats (see levels.ts): guaranteed elites and swarm surges. */
+  private runPaceEvents() {
+    while (this.paceIdx < PACE_EVENTS.length && this.time >= PACE_EVENTS[this.paceIdx]!.t) {
+      const e = PACE_EVENTS[this.paceIdx]!;
+      this.paceIdx += 1;
+      if (this.time - e.t > 3) continue; // skipped over (debug skipTo): don't burst-spawn
+      if (e.kind === "elite") {
+        const kind = this.sector === 0 ? "walker" : this.sector === 1 ? "sniper" : "crawler";
+        const m = this.spawnMob(false, kind);
+        if (m) {
+          this.makeElite(m, ELITE_MODS[this.paceIdx % ELITE_MODS.length]!);
+          this.announce("ELITE SIGNAL", 1.6);
+        }
+      } else {
+        this.surgeT = e.dur ?? 8;
+        this.announce(this.time > 280 ? "FINAL STAND · HOLD OUT" : "SWARM SURGE", 2);
+        this.audio.bossAlert();
+        for (let i = 0; i < 4; i++) {
+          const a = (i / 4) * Math.PI * 2 + Math.random();
+          this.spawnMob(false, "swarm", { x: this.px + Math.cos(a) * 560, y: this.py + Math.sin(a) * 560 });
+        }
+      }
     }
+  }
+
+  private makeElite(m: Mob, mod: string) {
+    m.elite = mod;
+    m.hp *= 3.2; m.r *= 1.25; m.xp *= 5; m.dmg *= 1.25;
+    if (mod === "swift") { m.speed *= 1.6; m.baseSpeed = m.speed; }
+    m.maxHp = m.hp;
   }
 
   private resize = () => {
@@ -604,7 +634,12 @@ export class Combat {
 
     this.spawnAcc += dt;
     const intensity = Math.min(1, this.time / MISSION_SECONDS);
-    const interval = Math.max(0.12, 0.85 - intensity * 0.68);
+    let bossAlive = false;
+    for (const q of this.mobs) if (q.alive && q.boss) { bossAlive = true; break; }
+    const pace = paceMultiplier(this.time, { bossAlive, uplinkActive: this.uplink.active });
+    const interval = Math.max(0.12, 0.85 - intensity * 0.68) / pace;
+    this.runPaceEvents();
+    if (this.surgeT > 0) this.surgeT -= dt;
     while (this.spawnAcc >= interval) {
       this.spawnAcc -= interval;
       const n = 1 + (intensity > 0.4 ? 1 : 0) + (intensity > 0.75 ? 1 : 0);
@@ -618,6 +653,7 @@ export class Combat {
     if (sec !== this.sector) {
       this.sector = sec;
       this.announce(SECTORS[sec]!.name, 2.8);
+      this.seedWrecks();
       this.audio.bossAlert();
       this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.1);
     }
@@ -930,9 +966,9 @@ export class Combat {
     }
   }
 
-  private spawnMob(boss: boolean, kindOverride?: string, at?: { x: number; y: number }) {
+  private spawnMob(boss: boolean, kindOverride?: string, at?: { x: number; y: number }): Mob | undefined {
     const m = this.mobs.find((x) => !x.alive);
-    if (!m) return;
+    if (!m) return undefined;
     const ang = Math.random() * Math.PI * 2;
     const dist = 520 + Math.random() * 180;
     m.x = at ? at.x : this.px + Math.cos(ang) * dist;
@@ -1003,6 +1039,7 @@ export class Combat {
     m.telegraph = 0;
     m.dashT = 0;
     if (!boss && m.kind !== "charger") m.special = 0;
+    return m;
   }
 
   private enemyShot(x: number, y: number, ang: number, sp: number, r: number, dmg: number, homing = 0, color = "#e07060") {
@@ -1250,8 +1287,9 @@ export class Combat {
       for (const w of this.wrecks) {
         const wx = m.x - w.x;
         const wy = m.y - w.y;
-        const wd = Math.hypot(wx, wy);
         const min = m.r + w.r;
+        if (wx > min || wx < -min || wy > min || wy < -min) continue;
+        const wd = Math.hypot(wx, wy);
         if (wd < min && wd > 0.001) {
           m.x += (wx / wd) * (min - wd);
           m.y += (wy / wd) * (min - wd);
@@ -1774,8 +1812,8 @@ export class Combat {
     for (let i = 0; i < this.wrecks.length; i++) {
       const wr = this.wrecks[i]!;
       if (!inView(wr.x, wr.y, 60)) continue;
-      if (shadow) ctx.drawImage(shadow.c, wr.x - 38, wr.y - 30, 84, 76);
-      const spr = cachedSprite(`wreck:${i}`, 96, (c) => drawWreck(c, wr.seed));
+      if (shadow) ctx.drawImage(shadow.c, wr.x - wr.r * 1.35, wr.y - wr.r * 1.05, wr.r * 3, wr.r * 2.7);
+      const spr = cachedSprite(`obs:${wr.kind}:${wr.seed}`, 96, (c) => drawObstacle(c, wr.kind, wr.seed));
       drawSprite(ctx, spr, wr.x, wr.y);
     }
     this.drawObjectives(ctx);
@@ -1951,30 +1989,44 @@ export class Combat {
       }
     }
     ctx.globalAlpha = 1;
-    // engine plume + player
+    // per-mech booster flames at the sprite's thruster ports (pattern + colour per mech)
     const accent = MECH_MAP[this.mechId].accent;
+    const boost = MECH_BOOSTERS[this.mechId];
     const moveSpd = Math.hypot(this.pvx, this.pvy);
-    if (moveSpd > 4) {
-      const back = Math.atan2(-this.pvy, -this.pvx);
-      const k = Math.min(1, moveSpd / 260);
-      const gx = this.px + Math.cos(back) * 16;
-      const gy = this.py + Math.sin(back) * 16;
-      const g = glowSprite(accent, true);
-      const r = 10 + k * 12;
-      ctx.globalCompositeOperation = "lighter";
-      ctx.globalAlpha = 0.7;
-      ctx.drawImage(g.c, gx - r, gy - r, r * 2, r * 2);
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = "source-over";
-      if (prof.trails && Math.random() < 0.6) {
+    const k = Math.min(1, moveSpd / 260);
+    const ca = Math.cos(this.aim);
+    const sa = Math.sin(this.aim);
+    const flameCol = glowSprite(boost.color, false);
+    const flameCore = glowSprite(boost.core, true);
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < boost.ports.length; i++) {
+      const [lx, ly] = boost.ports[i]!;
+      const wx = this.px + lx * ca - ly * sa;
+      const wy = this.py + lx * sa + ly * ca;
+      let f = 1;
+      if (boost.pattern === "pulse") f = 0.8 + 0.25 * Math.sin(this.time * 18);
+      else if (boost.pattern === "flicker") f = 0.75 + Math.random() * 0.45;
+      else if (boost.pattern === "stagger") f = 0.75 + 0.3 * Math.sin(this.time * 22 + i * 1.7);
+      const r = (5 + k * 9) * boost.size * f;
+      // flame tail trails opposite the aim (thrust out the back)
+      const tx = wx - ca * r * 0.9;
+      const ty = wy - sa * r * 0.9;
+      ctx.globalAlpha = 0.55 + 0.35 * k;
+      ctx.drawImage(flameCol.c, tx - r * 1.4, ty - r * 1.4, r * 2.8, r * 2.8);
+      ctx.globalAlpha = 0.9;
+      ctx.drawImage(flameCore.c, wx - r * 0.5, wy - r * 0.5, r, r);
+      if (bl) bl.light(tx, ty, r * 2.6, boost.color, 0.5 + 0.4 * k);
+      if (prof.trails && moveSpd > 20 && Math.random() < 0.35) {
         const p = this.allocFx();
         if (p) {
-          p.alive = true; p.kind = 1; p.x = gx; p.y = gy;
-          p.vx = Math.cos(back + (Math.random() - 0.5) * 0.5) * 80; p.vy = Math.sin(back + (Math.random() - 0.5) * 0.5) * 80;
-          p.life = 0.25; p.max = 0.25; p.size = 2 + k * 2; p.color = accent;
+          p.alive = true; p.kind = 1; p.x = tx; p.y = ty;
+          p.vx = -ca * 90 + (Math.random() - 0.5) * 30; p.vy = -sa * 90 + (Math.random() - 0.5) * 30;
+          p.life = 0.22; p.max = 0.22; p.size = 1.5 + k * 2 * boost.size; p.color = boost.color;
         }
       }
     }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
     if (bl) {
       bl.light(this.px, this.py, 64, accent, 0.28);
       if (this.overdriveT > 0) bl.light(this.px, this.py, 110, "#ffd166", 0.5);
