@@ -205,39 +205,175 @@ function head(ctx: CanvasRenderingContext2D, kind: Head, p: MechaPalette) {
   }
 }
 
-/** Player mech, roughly ±30px, facing +x. */
+/** Booster ports (sprite-local, facing +x) + flame style per mech, used by the combat renderer. */
+export interface BoosterSpec {
+  ports: readonly Pt[];
+  color: string;
+  core: string;
+  size: number; // flame radius scale
+  pattern: "steady" | "pulse" | "flicker" | "stagger";
+}
+export const MECH_BOOSTERS: Record<MechId, BoosterSpec> = {
+  aether: { ports: [[-27, -5], [-27, 5]], color: "#4aa8ff", core: "#e8f6ff", size: 1, pattern: "steady" },
+  forge: { ports: [[-30, -14], [-30, -5], [-30, 5], [-30, 14]], color: "#ff8a2a", core: "#ffe0a0", size: 0.75, pattern: "stagger" },
+  scythe: { ports: [[-30, 0]], color: "#b05aff", core: "#f0d8ff", size: 1.5, pattern: "flicker" },
+  dune: { ports: [[-24, -11], [-24, 11]], color: "#ffb84a", core: "#fff0c0", size: 1.2, pattern: "pulse" },
+  serpent: { ports: [[-40, 0]], color: "#4aff9a", core: "#e0ffe8", size: 1.1, pattern: "flicker" },
+  storm: { ports: [[-20, -24], [-24, -12], [-24, 12], [-20, 24]], color: "#5ae8ff", core: "#ffffff", size: 0.7, pattern: "stagger" },
+  vulture: { ports: [[-26, -9], [-26, 9]], color: "#ff4a3a", core: "#ffd0b0", size: 1.15, pattern: "pulse" },
+  cross: { ports: [[-30, 0], [-22, -10], [-22, 10], [-14, 0]], color: "#ffd84a", core: "#fffbe0", size: 0.9, pattern: "steady" },
+};
+
+function torso(ctx: CanvasRenderingContext2D, p: MechaPalette, w: number, h: number) {
+  // armour shell + coloured chest + vents + cockpit, sized per mech
+  plate(ctx, [[-w * 0.8, -h], [w * 0.5, -h], [w, -h * 0.5], [w, h * 0.5], [w * 0.5, h], [-w * 0.8, h]], p.armor, 2.2);
+  plate(ctx, [[-w * 0.35, -h * 0.75], [w * 0.65, -h * 0.7], [w * 0.85, -h * 0.3], [w * 0.85, h * 0.3], [w * 0.65, h * 0.7], [-w * 0.35, h * 0.75]], p.frame, 1.6);
+  ctx.fillStyle = p.crest;
+  ctx.fillRect(w * 0.35, -h * 0.5, w * 0.3, h * 0.22);
+  ctx.fillRect(w * 0.35, h * 0.28, w * 0.3, h * 0.22);
+  plate(ctx, [[-w * 0.15, -h * 0.22], [w * 0.25, -h * 0.22], [w * 0.25, h * 0.22], [-w * 0.15, h * 0.22]], p.trim, 1.2);
+}
+
+function nozzles(ctx: CanvasRenderingContext2D, id: MechId) {
+  const b = MECH_BOOSTERS[id];
+  for (const [x, y] of b.ports) thruster(ctx, x, y, 6, 5 * Math.max(0.8, b.size), b.color);
+}
+
+/** Player mech, roughly ±32px, facing +x. Each mech has its own body plan. */
 export function drawMecha(ctx: CanvasRenderingContext2D, id: MechId, weaponKind: WeaponKind) {
   const p = MECH_PALETTES[id];
-  const heavy = id === "forge" || id === "dune" || id === "vulture";
-  const winged = id === "storm" || id === "aether" || id === "cross";
   ctx.save();
-  // backpack + thrusters (behind)
-  if (winged) {
-    both(ctx, [[-14, -6], [-30, -26], [-24, -28], [-8, -10]], p.armor, 1.8);
-    both(ctx, [[-20, -14], [-28, -24], [-25, -25], [-17, -15]], p.frame, 1);
+  switch (id) {
+    case "aether": {
+      // slim interceptor: long swept V-wings, narrow shoulders, long beam rifle
+      both(ctx, [[-10, -6], [-32, -30], [-26, -32], [-4, -10]], p.armor, 1.8);
+      both(ctx, [[-22, -20], [-30, -29], [-27, -30], [-19, -21]], p.frame, 1);
+      plate(ctx, [[-20, -7], [-8, -9], [-8, 9], [-20, 7]], "#5a6070", 2);
+      nozzles(ctx, id);
+      both(ctx, [[-6, -14], [4, -14], [6, -18], [-4, -20]], p.armor, 1.8);
+      plate(ctx, [[0, 7], [12, 7], [12, 14], [0, 14]], p.armor, 1.6);
+      weapon(ctx, "beam", p);
+      torso(ctx, p, 10, 11);
+      ctx.translate(2, 0);
+      head(ctx, "vfin", p);
+      break;
+    }
+    case "forge": {
+      // squat heavy artillery: wide tread skirt, twin box missile pods, rotary cannon
+      both(ctx, [[-26, -22], [-6, -22], [-6, -12], [-26, -12]], "#2b2f38", 2); // treads
+      ctx.fillStyle = "#4a4f5c";
+      for (let i = 0; i < 5; i++) for (const sg of [-1, 1]) ctx.fillRect(-25 + i * 4, sg * 17 - 4, 2, 8);
+      plate(ctx, [[-24, -11], [-10, -12], [-10, 12], [-24, 11]], p.frame, 2);
+      nozzles(ctx, id);
+      both(ctx, [[-12, -14], [10, -14], [12, -30], [-12, -30]], p.armor, 2.2); // huge pods
+      for (const sg of [-1, 1]) {
+        ctx.fillStyle = INK;
+        for (let i = 0; i < 4; i++) for (let j = 0; j < 2; j++) ctx.fillRect(-9 + i * 5, sg * (18 + j * 6) - 2, 3.5, 4);
+      }
+      weapon(ctx, "gatling", p);
+      torso(ctx, p, 13, 13);
+      ctx.translate(4, 0);
+      head(ctx, "visor", p);
+      break;
+    }
+    case "scythe": {
+      // tall slim reaper: trailing blade-cloak fins, single central booster, huge glaive arc
+      both(ctx, [[-6, -6], [-30, -18], [-36, -10], [-14, -2]], p.frame, 1.6);
+      both(ctx, [[-8, -8], [-26, -26], [-30, -22], [-12, -6]], p.armor, 1.6);
+      nozzles(ctx, id);
+      plate(ctx, [[-16, -5], [-6, -7], [-6, 7], [-16, 5]], "#3a3045", 1.8);
+      plate(ctx, [[0, 6], [14, 6], [14, 12], [0, 12]], p.armor, 1.6);
+      weapon(ctx, "melee", p);
+      plate(ctx, [[-8, -9], [8, -8], [14, -3], [14, 3], [8, 8], [-8, 9]], p.armor, 2); // narrow long torso
+      plate(ctx, [[-2, -6], [9, -5], [12, 0], [9, 5], [-2, 6]], p.frame, 1.4);
+      ctx.translate(5, 0);
+      head(ctx, "horn", p);
+      break;
+    }
+    case "dune": {
+      // round hover-tank: circular skirt, big tower shield in front, stubby shotgun
+      ctx.fillStyle = shade(p.frame, -0.1);
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.ellipse(-6, 0, 18, 20, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      nozzles(ctx, id);
+      both(ctx, [[-10, -12], [8, -12], [10, -22], [-8, -24]], p.armor, 2);
+      plate(ctx, [[8, 8], [26, 8], [30, 11], [30, 15], [8, 15]], "#4a4f5c", 1.8);
+      torso(ctx, p, 11, 12);
+      plate(ctx, [[14, -26], [24, -20], [26, 0], [24, 4], [14, 2]], p.armor, 2.4); // tower shield
+      plate(ctx, [[17, -20], [22, -16], [22, -6], [17, -8]], p.trim, 1.2);
+      ctx.translate(0, 0);
+      head(ctx, "crest", p);
+      break;
+    }
+    case "serpent": {
+      // long segmented predator: tail segments trailing, claw fangs forward, no wings
+      for (let i = 3; i >= 1; i--) {
+        const x = -10 - i * 8;
+        const r = 7 - i;
+        plate(ctx, [[x - r, -r], [x + r, -r - 1], [x + r + 2, 0], [x + r, r + 1], [x - r, r]], i % 2 ? p.armor : p.frame, 1.6);
+      }
+      nozzles(ctx, id);
+      both(ctx, [[2, -10], [20, -14], [26, -8], [10, -6]], p.armor, 1.8); // claw arms
+      both(ctx, [[20, -14], [30, -12], [26, -8]], "#d8f0e0", 1.2);
+      plate(ctx, [[-12, -9], [6, -10], [12, -4], [12, 4], [6, 10], [-12, 9]], p.armor, 2);
+      plate(ctx, [[-6, -6], [8, -6], [10, 0], [8, 6], [-6, 6]], p.frame, 1.4);
+      weapon(ctx, "fang", p);
+      ctx.translate(3, 0);
+      head(ctx, "vfin", p);
+      break;
+    }
+    case "storm": {
+      // delta-wing caster: broad triangular wings, 4 floating bits, edge boosters
+      both(ctx, [[-4, -8], [-24, -32], [-18, -8]], p.armor, 2);
+      both(ctx, [[-10, -12], [-20, -26], [-16, -12]], p.frame, 1.2);
+      for (const [x, y] of [[8, -28], [8, 28], [-4, -36], [-4, 36]] as const) {
+        plate(ctx, [[x - 4, y - 2], [x + 4, y - 3], [x + 6, y], [x + 4, y + 3], [x - 4, y + 2]], p.crest, 1.4);
+        lens(ctx, x + 3, y, 1.2, p.eye);
+      }
+      nozzles(ctx, id);
+      plate(ctx, [[-14, -6], [-6, -8], [-6, 8], [-14, 6]], "#5a6070", 1.8);
+      weapon(ctx, "arc", p);
+      torso(ctx, p, 10, 10);
+      ctx.translate(2, 0);
+      head(ctx, "vfin", p);
+      break;
+    }
+    case "vulture": {
+      // hunched gunship: folded forward talon-wings, spine-length mortar cannon
+      both(ctx, [[-14, -10], [6, -26], [12, -22], [-6, -8]], p.frame, 1.8);
+      both(ctx, [[6, -26], [16, -26], [12, -22]], "#d9d9d9", 1.2);
+      plate(ctx, [[-22, -10], [-10, -12], [-10, 12], [-22, 10]], p.frame, 2);
+      nozzles(ctx, id);
+      torso(ctx, p, 12, 12);
+      plate(ctx, [[-24, -4], [24, -3], [28, 0], [24, 3], [-24, 4]], "#4a4f5c", 2); // spine cannon
+      plate(ctx, [[24, -5], [32, -5], [32, 5], [24, 5]], "#2b2f38", 1.6);
+      ctx.fillStyle = p.trim;
+      ctx.fillRect(-4, -2, 10, 4);
+      ctx.translate(-2, 9);
+      ctx.scale(0.85, 0.85);
+      head(ctx, "horn", p);
+      break;
+    }
+    case "cross": {
+      // tall knight: cross-shaped booster frame, long tabard panels, giant lance
+      plate(ctx, [[-30, -3], [-8, -3], [-8, 3], [-30, 3]], p.frame, 1.8); // cross spine
+      plate(ctx, [[-23, -14], [-19, -14], [-19, 14], [-23, 14]], p.frame, 1.8); // cross bar
+      both(ctx, [[-4, -12], [-24, -18], [-26, -14], [-6, -8]], p.armor, 1.6); // tabard panels
+      nozzles(ctx, id);
+      both(ctx, [[-8, -12], [8, -12], [10, -20], [-6, -24]], p.armor, 2);
+      both(ctx, [[-4, -22], [6, -19], [4, -16], [-6, -18]], p.crest, 1.2);
+      weapon(ctx, "lance", p);
+      torso(ctx, p, 11, 12);
+      ctx.translate(3, 0);
+      head(ctx, "cross", p);
+      break;
+    }
   }
-  plate(ctx, [[-20, -9], [-8, -11], [-8, 11], [-20, 9]], heavy ? p.frame : "#5a6070", 2);
-  thruster(ctx, -26, -5, 7, 6, p.glow);
-  thruster(ctx, -26, 5, 7, 6, p.glow);
-  // legs / skirt peeking out behind the torso
-  both(ctx, [[-12, -4], [-4, -6], [-4, -2], [-12, -1]], p.armor, 1.6);
-  // shoulders
-  const sh = heavy ? 24 : 20;
-  both(ctx, [[-8, -sh + 6], [6, -sh + 6], [8, -sh], [-2, -sh - 4], [-10, -sh + 1]], p.armor, 2);
-  both(ctx, [[-2, -sh - 3], [6, -sh + 1], [4, -sh + 4], [-4, -sh]], p.trim, 1.2);
-  // forearm on weapon side
-  plate(ctx, [[0, 7], [12, 7], [12, 16], [0, 16]], p.armor, 1.8);
-  plate(ctx, [[8, 7], [12, 7], [12, 16], [8, 16]], p.trim, 1.2);
-  weapon(ctx, weaponKind, p);
-  // torso: armour shell + coloured chest block + vents
-  plate(ctx, [[-10, -12], [6, -13], [12, -6], [12, 6], [6, 13], [-10, 12]], p.armor, 2.2);
-  plate(ctx, [[-4, -10], [8, -9], [10, -4], [10, 4], [8, 9], [-4, 10]], p.frame, 1.6);
-  ctx.fillStyle = p.crest;
-  for (const y of [-6, 3]) ctx.fillRect(4, y, 4, 3); // chest vents
-  plate(ctx, [[-2, -3], [3, -3], [3, 3], [-2, 3]], p.trim, 1.2); // cockpit hatch
-  // head on top
-  ctx.translate(2, 0);
-  head(ctx, HEADS[id], p);
+  void weaponKind;
   ctx.restore();
 }
 
@@ -351,17 +487,50 @@ export function drawMechaEnemy(ctx: CanvasRenderingContext2D, kind: string): boo
       grunt(ctx, GRUNT.walker!, { weapon: "mg" });
       return true;
     case "crawler":
+      // quad-legged artillery walker: four splayed legs read instantly
+      for (const [x, y] of [[10, -1], [10, 1], [-14, -1], [-14, 1]] as const) {
+        const sx = x > 0 ? 1 : -1;
+        plate(ctx, [[x, y * 12], [x + sx * 12, y * 26], [x + sx * 16, y * 24], [x + sx * 4, y * 10]], "#3a2c20", 1.6);
+      }
       grunt(ctx, GRUNT.crawler!, { heavy: true, weapon: "cannon" });
       return true;
     case "charger":
+      // forward-leaning wedge with ram horns
+      both(ctx, [[8, -8], [24, -14], [14, -4]], "#e8e0d0", 1.4);
+      ctx.save();
+      ctx.scale(1.15, 0.85);
       grunt(ctx, GRUNT.charger!, { weapon: "axe" });
+      ctx.restore();
       return true;
     case "sniper":
+      // slim, long-barrel, sensor mast trailing
+      plate(ctx, [[-30, -1], [-12, -1.5], [-12, 1.5], [-30, 1]], "#2b2f38", 1);
+      lens(ctx, -30, 0, 1.6, GRUNT.sniper!.eye);
+      ctx.save();
+      ctx.scale(1, 0.75);
       grunt(ctx, GRUNT.sniper!, { weapon: "rifle" });
+      ctx.restore();
+      plate(ctx, [[20, 7], [40, 7.5], [40, 9.5], [20, 10]], "#2f3340", 1.2);
       return true;
-    case "shielder":
-      grunt(ctx, GRUNT.shielder!, { weapon: "shield" });
+    case "shielder": {
+      // squat wall: wide stance, big round riot shield
+      ctx.save();
+      ctx.scale(0.85, 1.15);
+      grunt(ctx, GRUNT.shielder!, { weapon: "mg" });
+      ctx.restore();
+      ctx.fillStyle = GRUNT.shielder!.armor;
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.arc(6, 0, 22, -0.9, 0.9);
+      ctx.arc(6, 0, 16, 0.9, -0.9, true);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#f2d24a";
+      ctx.fillRect(24, -3, 4, 6);
       return true;
+    }
     case "ace":
       // commander custom: sleeker, horned, twin thrusters
       grunt(ctx, GRUNT.ace!, { horn: true, weapon: "rifle" });

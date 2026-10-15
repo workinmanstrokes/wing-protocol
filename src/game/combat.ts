@@ -2,6 +2,7 @@ import { MISSION_SECONDS, MECH_MAP, PERKS, PERK_MAP, WORLD, xpForLevel, rollGear
 import { GameAudio } from "./audio";
 import { GameInput } from "./input";
 import { drawEnemyTop, drawMechTop, drawPickup, drawWreck } from "./sprites";
+import { MECH_BOOSTERS } from "./mecha";
 import type { GearItem, HudState, MechId, PerkId, RunResult } from "./types";
 import type { SaveData } from "./types";
 
@@ -1951,30 +1952,44 @@ export class Combat {
       }
     }
     ctx.globalAlpha = 1;
-    // engine plume + player
+    // per-mech booster flames at the sprite's thruster ports (pattern + colour per mech)
     const accent = MECH_MAP[this.mechId].accent;
+    const boost = MECH_BOOSTERS[this.mechId];
     const moveSpd = Math.hypot(this.pvx, this.pvy);
-    if (moveSpd > 4) {
-      const back = Math.atan2(-this.pvy, -this.pvx);
-      const k = Math.min(1, moveSpd / 260);
-      const gx = this.px + Math.cos(back) * 16;
-      const gy = this.py + Math.sin(back) * 16;
-      const g = glowSprite(accent, true);
-      const r = 10 + k * 12;
-      ctx.globalCompositeOperation = "lighter";
-      ctx.globalAlpha = 0.7;
-      ctx.drawImage(g.c, gx - r, gy - r, r * 2, r * 2);
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = "source-over";
-      if (prof.trails && Math.random() < 0.6) {
+    const k = Math.min(1, moveSpd / 260);
+    const ca = Math.cos(this.aim);
+    const sa = Math.sin(this.aim);
+    const flameCol = glowSprite(boost.color, false);
+    const flameCore = glowSprite(boost.core, true);
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < boost.ports.length; i++) {
+      const [lx, ly] = boost.ports[i]!;
+      const wx = this.px + lx * ca - ly * sa;
+      const wy = this.py + lx * sa + ly * ca;
+      let f = 1;
+      if (boost.pattern === "pulse") f = 0.8 + 0.25 * Math.sin(this.time * 18);
+      else if (boost.pattern === "flicker") f = 0.75 + Math.random() * 0.45;
+      else if (boost.pattern === "stagger") f = 0.75 + 0.3 * Math.sin(this.time * 22 + i * 1.7);
+      const r = (5 + k * 9) * boost.size * f;
+      // flame tail trails opposite the aim (thrust out the back)
+      const tx = wx - ca * r * 0.9;
+      const ty = wy - sa * r * 0.9;
+      ctx.globalAlpha = 0.55 + 0.35 * k;
+      ctx.drawImage(flameCol.c, tx - r * 1.4, ty - r * 1.4, r * 2.8, r * 2.8);
+      ctx.globalAlpha = 0.9;
+      ctx.drawImage(flameCore.c, wx - r * 0.5, wy - r * 0.5, r, r);
+      if (bl) bl.light(tx, ty, r * 2.6, boost.color, 0.5 + 0.4 * k);
+      if (prof.trails && moveSpd > 20 && Math.random() < 0.35) {
         const p = this.allocFx();
         if (p) {
-          p.alive = true; p.kind = 1; p.x = gx; p.y = gy;
-          p.vx = Math.cos(back + (Math.random() - 0.5) * 0.5) * 80; p.vy = Math.sin(back + (Math.random() - 0.5) * 0.5) * 80;
-          p.life = 0.25; p.max = 0.25; p.size = 2 + k * 2; p.color = accent;
+          p.alive = true; p.kind = 1; p.x = tx; p.y = ty;
+          p.vx = -ca * 90 + (Math.random() - 0.5) * 30; p.vy = -sa * 90 + (Math.random() - 0.5) * 30;
+          p.life = 0.22; p.max = 0.22; p.size = 1.5 + k * 2 * boost.size; p.color = boost.color;
         }
       }
     }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
     if (bl) {
       bl.light(this.px, this.py, 64, accent, 0.28);
       if (this.overdriveT > 0) bl.light(this.px, this.py, 110, "#ffd166", 0.5);
