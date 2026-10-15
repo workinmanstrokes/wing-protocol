@@ -673,3 +673,38 @@ export function drawWreck(ctx: CanvasRenderingContext2D, seed: number) {
   glowDot(ctx, -8, 3, 1.4, "#ff9a5c", "#7a3018");
   ctx.restore();
 }
+
+/** Sector obstacles: wreck (Outer Yard), ion pylon (Ion Storm), reactor barrier (Reactor Core). */
+export function drawObstacle(ctx: CanvasRenderingContext2D, kind: string, seed: number) {
+  if (kind === "pylon") {
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.beginPath();
+    ctx.arc(2, 3, 18, 0, Math.PI * 2);
+    ctx.fill();
+    plateGrad(ctx, -14, -14, 28, 28, "#3a4660", "#1a2030", "#0a0d14", 6);
+    plateGrad(ctx, -8, -8, 16, 16, "#5a6a8a", "#2a3448", "#0a0d14", 4);
+    glowDot(ctx, 0, 0, 3.2, "#bfe6ff", "#3a7ad0");
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + seed * 0.3;
+      glowDot(ctx, Math.cos(a) * 11, Math.sin(a) * 11, 1.2, "#8fd0ff", "#2a5a90");
+    }
+    ctx.restore();
+    return;
+  }
+  if (kind === "barrier") {
+    ctx.save();
+    ctx.rotate(seed * 0.5);
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.fillRect(-22, -18, 48, 40);
+    plateGrad(ctx, -24, -20, 46, 38, "#5a3a2e", "#2a1814", "#0e0807", 5);
+    ctx.fillStyle = "#e8b04a";
+    for (let i = 0; i < 4; i++) ctx.fillRect(-20 + i * 11, -18, 5, 4);
+    ctx.fillStyle = "#1a0e0a";
+    for (let i = 0; i < 4; i++) ctx.fillRect(-15 + i * 11, -18, 5, 4);
+    glowDot(ctx, 0, 2, 2.4, "#ffb070", "#a03a18");
+    ctx.restore();
+    return;
+  }
+  drawWreck(ctx, seed * 0.7);
+}
