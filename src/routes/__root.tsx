@@ -4,6 +4,8 @@ import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "Wing Protocol";
+// Relative to the deploy base so the manifest/icons also resolve on sub-path hosts (GitHub Pages test builds).
+const BASE = import.meta.env.BASE_URL;
 
 export const Route = createRootRoute({
   head: () => ({
@@ -17,6 +19,7 @@ export const Route = createRootRoute({
         content: "Survive timed mech sorties against endless machine hordes. Unlock frames, open crates, and extract legendary gear.",
       },
       { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
       { name: "apple-mobile-web-app-title", content: APP_NAME },
       { name: "twitter:card", content: "summary_large_image" },
@@ -29,10 +32,10 @@ export const Route = createRootRoute({
       { property: "og:image", content: "https://wp2-pi.vercel.app/og.jpg" },
     ],
     links: [
-      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+      { rel: "icon", type: "image/svg+xml", href: `${BASE}favicon.svg` },
       { rel: "stylesheet", href: appCss },
-      { rel: "manifest", href: "/manifest.webmanifest" },
-      { rel: "apple-touch-icon", href: "/icon-180.png" },
+      { rel: "manifest", href: `${BASE}manifest.webmanifest` },
+      { rel: "apple-touch-icon", sizes: "180x180", href: `${BASE}icon-180.png` },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -40,6 +43,8 @@ export const Route = createRootRoute({
         href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Rajdhani:wght@500;600;700&display=swap",
       },
     ],
+    // iOS/PWA helper (offline service worker, WebAudio unlock on first tap, no zoom/rubber-band). Production only.
+    scripts: import.meta.env.PROD ? [{ src: `${BASE}ios.js` }] : [],
   }),
   component: () => (
     <html lang="en" suppressHydrationWarning>

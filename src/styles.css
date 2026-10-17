@@ -62,3 +62,8 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Keep the UI clear of the iPhone notch / Dynamic Island and home bar (viewport-fit=cover + black-translucent status bar). */
+.safe-area {
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}

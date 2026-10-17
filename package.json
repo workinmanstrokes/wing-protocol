@@ -19,7 +19,8 @@
     "check:auth": "node scripts/check-auth-invariant.mjs",
     "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/auth/gate-identity.test.ts src/game/levels.test.ts",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "build:pwa": "BUILD_TARGET=capacitor vite build --base ${PWA_BASE:-/} && node scripts/gen-sw.mjs dist/client wingprotocol"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

@@ -111,7 +111,7 @@ export function GameApp() {
   };
 
   return (
-    <div className="relative h-dvh w-full overflow-hidden bg-bg font-sans text-fg">
+    <div className="safe-area relative h-dvh w-full overflow-hidden bg-bg font-sans text-fg">
       {screen === "hangar" && (
         <Hangar
           tab={tab}
