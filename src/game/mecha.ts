@@ -1,8 +1,10 @@
 /**
- * Original top-down "real robot" mecha sprites: bold ink outlines, two-tone cel
- * shading (hard shadow on the +y side, light from the top-left), angular armour,
- * fin crests, mono-eye grunts and big mobile-armour bosses. All shapes are drawn
- * in code here — no external art. Sprites face +x (the aim direction).
+ * Original top-down mecha sprites: bold ink outlines, two-tone cel shading (hard
+ * shadow on the +y side, light from the top-left) and angular armour. Each player
+ * mech has its own head and silhouette (canopy, sensor cluster, mandibles, dome,
+ * hammerhead, halo ring, beak, great-helm). Enemies are tri-eye drone walkers and
+ * big war-machine bosses. All shapes are drawn in code here, with no external art.
+ * Sprites face +x (the aim direction).
  */
 import type { MechId, WeaponKind } from "./types";
 
@@ -88,33 +90,30 @@ function thruster(ctx: CanvasRenderingContext2D, x: number, y: number, w: number
 }
 
 export interface MechaPalette {
-  armor: string; // main armour (white in the hero scheme)
+  armor: string; // main armour
   frame: string; // inner frame / chest
-  trim: string; // red trim
-  crest: string; // yellow fin / crest
+  trim: string; // accent stripe
+  accent: string; // secondary accent (wing tips, mandibles, rings)
   eye: string;
   glow: string; // thruster colour
 }
 
+// Every scheme is its own colour family. None uses the white / blue / red / yellow hero scheme.
 export const MECH_PALETTES: Record<MechId, MechaPalette> = {
-  aether: { armor: "#eef1f6", frame: "#2f5fd0", trim: "#d8323a", crest: "#f5c518", eye: "#5ef0ff", glow: "#7ad8f0" },
-  forge: { armor: "#5d6b7e", frame: "#2b3442", trim: "#e0782a", crest: "#f5c518", eye: "#ffd166", glow: "#ffb070" },
-  scythe: { armor: "#2a2433", frame: "#6b3fa0", trim: "#c9a227", crest: "#e8c84a", eye: "#ff4a8a", glow: "#c890ff" },
-  dune: { armor: "#d9c49a", frame: "#7a5a32", trim: "#c4452e", crest: "#f0f0f0", eye: "#7af0a0", glow: "#ffcf8a" },
-  serpent: { armor: "#e9f2ec", frame: "#2f8f5a", trim: "#d8323a", crest: "#f5c518", eye: "#9cffd0", glow: "#7ae0a0" },
-  storm: { armor: "#f2f4fa", frame: "#1f3f9a", trim: "#f5c518", crest: "#f5c518", eye: "#8fd0ff", glow: "#8fd0ff" },
-  vulture: { armor: "#3a1c20", frame: "#191a20", trim: "#c4342e", crest: "#d9d9d9", eye: "#ff6a4a", glow: "#ff8a5c" },
-  cross: { armor: "#f4f1e8", frame: "#b88a1e", trim: "#c4302a", crest: "#f5c518", eye: "#9fe8ff", glow: "#fff0c0" },
-  moth: { armor: "#e8dcc0", frame: "#6a5a8a", trim: "#b0742e", crest: "#ffb347", eye: "#7af0e0", glow: "#ffd08a" },
-  kiln: { armor: "#7a4a2e", frame: "#3a2a22", trim: "#c4c0b8", crest: "#ff7a2a", eye: "#ffd04a", glow: "#ff8a3a" },
-  kite: { armor: "#3a6ea8", frame: "#1e2a44", trim: "#ff5a8a", crest: "#f0ece0", eye: "#ff8ab0", glow: "#ff8ab0" },
+  aether: { armor: "#d6e6e3", frame: "#2a6e78", trim: "#ff8a3a", accent: "#8fe8d6", eye: "#ffb85a", glow: "#7ad8f0" },
+  forge: { armor: "#5d6b7e", frame: "#2b3442", trim: "#e0782a", accent: "#8fd14f", eye: "#ffd166", glow: "#ffb070" },
+  scythe: { armor: "#2a2433", frame: "#6b3fa0", trim: "#c9a227", accent: "#b8a0e0", eye: "#9cff5a", glow: "#c890ff" },
+  dune: { armor: "#d9c49a", frame: "#7a5a32", trim: "#a8552e", accent: "#efe6d0", eye: "#7af0a0", glow: "#ffcf8a" },
+  serpent: { armor: "#3f9a6a", frame: "#1e3a2e", trim: "#e8dcc0", accent: "#c8f06a", eye: "#ffe08a", glow: "#7ae0a0" },
+  storm: { armor: "#2e3466", frame: "#6a52d6", trim: "#5ae8ff", accent: "#5ae8ff", eye: "#c8f4ff", glow: "#8fd0ff" },
+  vulture: { armor: "#3a1c20", frame: "#191a20", trim: "#c4342e", accent: "#d9d0c0", eye: "#ffb04a", glow: "#ff8a5c" },
+  cross: { armor: "#f0ebde", frame: "#b88a1e", trim: "#2a8a86", accent: "#e8c35a", eye: "#9ff0e0", glow: "#fff0c0" },
+  moth: { armor: "#e8dcc0", frame: "#6a5a8a", trim: "#b0742e", accent: "#ffb347", eye: "#7af0e0", glow: "#ffd08a" },
+  kiln: { armor: "#7a4a2e", frame: "#3a2a22", trim: "#c4c0b8", accent: "#ff7a2a", eye: "#ffd04a", glow: "#ff8a3a" },
+  kite: { armor: "#3a6ea8", frame: "#1e2a44", trim: "#ff5a8a", accent: "#f0ece0", eye: "#ff8ab0", glow: "#ff8ab0" },
 };
 
-type Head = "vfin" | "crest" | "horn" | "cross" | "visor";
-const HEADS: Record<MechId, Head> = {
-  aether: "vfin", forge: "visor", scythe: "horn", dune: "crest", serpent: "vfin", storm: "vfin", vulture: "horn", cross: "cross",
-  moth: "visor", kiln: "visor", kite: "visor",
-};
+type Head = "canopy" | "cluster" | "mandible" | "dome" | "hammer" | "halo" | "beak" | "helm";
 
 function weapon(ctx: CanvasRenderingContext2D, kind: WeaponKind, p: MechaPalette) {
   switch (kind) {
@@ -126,10 +125,9 @@ function weapon(ctx: CanvasRenderingContext2D, kind: WeaponKind, p: MechaPalette
     case "gatling":
       plate(ctx, [[6, 7], [30, 8], [30, 17], [6, 17]], "#4a4f5c", 1.8);
       for (const y of [9.5, 12.5, 15.5]) plate(ctx, [[30, y - 1.2], [38, y - 1.2], [38, y + 1.2], [30, y + 1.2]], "#2b2f38", 1);
-      // shoulder missile pod
-      plate(ctx, [[-10, -24], [6, -24], [6, -14], [-10, -14]], p.frame, 1.8);
+      // ammo feed belt from the back drum
       ctx.fillStyle = p.trim;
-      for (let i = 0; i < 3; i++) ctx.fillRect(-7 + i * 5, -21, 3, 4);
+      for (let i = 0; i < 4; i++) ctx.fillRect(-1 + i * 2.2, 13 - i * 0.6, 1.4, 3);
       break;
     case "melee":
       plate(ctx, [[6, 10], [20, 10], [20, 13], [6, 13]], "#4a4f5c", 1.6);
@@ -178,38 +176,115 @@ function weapon(ctx: CanvasRenderingContext2D, kind: WeaponKind, p: MechaPalette
 }
 
 function head(ctx: CanvasRenderingContext2D, kind: Head, p: MechaPalette) {
-  // helmet
-  plate(ctx, [[-5, -6], [4, -6], [8, -3], [8, 3], [4, 6], [-5, 6]], p.armor, 1.8);
-  // face / visor
-  if (kind === "visor") {
-    plate(ctx, [[3, -5], [8, -3], [8, 3], [3, 5]], INK, 1);
-    ctx.fillStyle = p.eye;
-    ctx.fillRect(5, -3.5, 2, 7);
-  } else {
-    plate(ctx, [[4, -3.2], [8.5, -2], [8.5, 2], [4, 3.2]], "#e6e9ef", 1);
-    ctx.fillStyle = p.eye;
-    ctx.fillRect(5.2, -2.6, 2.4, 1.6);
-    ctx.fillRect(5.2, 1, 2.4, 1.6);
-    ctx.fillStyle = p.trim;
-    ctx.fillRect(7.6, -0.8, 1.2, 1.6); // chin vent
-  }
-  // crest
-  if (kind === "vfin") {
-    plate(ctx, [[5, -1], [16, -12], [14, -13], [3, -3]], p.crest, 1.4);
-    plate(ctx, [[5, 1], [16, 12], [14, 13], [3, 3]], p.crest, 1.4);
-    plate(ctx, [[2, -2], [6, -2], [6, 2], [2, 2]], p.trim, 1);
-  } else if (kind === "crest") {
-    plate(ctx, [[-2, -1.4], [14, -1], [14, 1], [-2, 1.4]], p.crest, 1.4);
-  } else if (kind === "horn") {
-    plate(ctx, [[2, -1.5], [18, 0], [2, 1.5]], p.crest, 1.4);
-    plate(ctx, [[-2, -5], [6, -11], [4, -5]], p.crest, 1.2);
-    plate(ctx, [[-2, 5], [4, 5], [6, 11]], p.crest, 1.2);
-  } else if (kind === "cross") {
-    plate(ctx, [[1, -1.4], [14, -1.4], [14, 1.4], [1, 1.4]], p.crest, 1.4);
-    plate(ctx, [[8, -7], [11, -7], [11, 7], [8, 7]], p.crest, 1.4);
-  } else {
-    plate(ctx, [[-4, -7], [2, -9], [2, -6]], p.crest, 1.2);
-    plate(ctx, [[-4, 7], [2, 6], [2, 9]], p.crest, 1.2);
+  // Each original mech has its own head shape. None of them use a forehead accent or a face mask.
+  switch (kind) {
+    case "canopy": {
+      // Aether: a long glass cockpit canopy on a teardrop nose. There's no separate head.
+      plate(ctx, [[-7, -5], [3, -5.5], [12, 0], [3, 5.5], [-7, 5]], p.armor, 1.8);
+      plate(ctx, [[-4, -3.2], [3, -3.6], [9.5, 0], [3, 3.6], [-4, 3.2]], shade(p.eye, -0.45), 1.2);
+      ctx.strokeStyle = "rgba(255,255,255,0.75)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-2, -2);
+      ctx.lineTo(5, -2.2);
+      ctx.stroke();
+      ctx.fillStyle = p.trim;
+      ctx.fillRect(-7, -1, 3, 2);
+      break;
+    }
+    case "cluster": {
+      // Forge: a boxy sensor block with a 2x3 grid of small lenses, like a spider's eyes.
+      plate(ctx, [[-6, -6], [5, -6], [8, -4], [8, 4], [5, 6], [-6, 6]], p.armor, 1.8);
+      plate(ctx, [[2, -5], [8, -3.6], [8, 3.6], [2, 5]], INK, 1);
+      for (const x of [3.9, 6.3]) for (const y of [-2.9, 0, 2.9]) lens(ctx, x, y, 0.8, p.eye);
+      break;
+    }
+    case "mandible": {
+      // Scythe: a narrow wedge head with compound eyes and two curved mandibles.
+      both(ctx, [[5, -3.4], [10, -6.4], [14.5, -5], [16, -1.6], [13, -2.8], [9.5, -3.4], [6.5, -1.4]], p.accent, 1.2);
+      plate(ctx, [[-6, -4], [3, -5.5], [8, -2], [8, 2], [3, 5.5], [-6, 4]], p.armor, 1.8);
+      lens(ctx, 3.4, -3, 1.5, p.eye);
+      lens(ctx, 3.4, 3, 1.5, p.eye);
+      break;
+    }
+    case "dome": {
+      // Dune: a round turret dome with a wide wraparound visor band and a top hatch.
+      ctx.fillStyle = p.armor;
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(0, 0, 7.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.save();
+      ctx.clip();
+      ctx.fillStyle = shade(p.armor, -0.32);
+      ctx.fillRect(-8, 1.5, 16, 8);
+      ctx.restore();
+      ctx.stroke();
+      ctx.lineCap = "butt";
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 3.4;
+      ctx.beginPath();
+      ctx.arc(0, 0, 5.6, -1.1, 1.1);
+      ctx.stroke();
+      ctx.strokeStyle = p.eye;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      lens(ctx, -2.5, 0, 1.8, p.frame);
+      break;
+    }
+    case "hammer": {
+      // Serpent: an angular hammerhead bar with lenses out at both tips.
+      plate(ctx, [[-5, -4], [3, -4], [5, -11], [10, -12], [12, -7], [9.5, 0], [12, 7], [10, 12], [5, 11], [3, 4], [-5, 4]], p.armor, 1.8);
+      plate(ctx, [[3, -2], [9, -1.5], [9, 1.5], [3, 2]], p.trim, 1);
+      lens(ctx, 9.6, -9, 1.4, p.eye);
+      lens(ctx, 9.6, 9, 1.4, p.eye);
+      break;
+    }
+    case "halo": {
+      // Storm: a round head inside a sensor ring with three glowing nodes.
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 3.6;
+      ctx.beginPath();
+      ctx.arc(0, 0, 9.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = p.accent;
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+      ctx.fillStyle = p.armor;
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(0, 0, 5.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = INK;
+      ctx.fillRect(2, -3.6, 2.6, 7.2);
+      ctx.fillStyle = p.eye;
+      ctx.fillRect(2.7, -2.8, 1.2, 5.6);
+      for (const a of [0, 2.1, -2.1]) lens(ctx, Math.cos(a) * 9.5, Math.sin(a) * 9.5, 1.2, p.eye);
+      break;
+    }
+    case "beak": {
+      // Vulture: a hooded raptor head with a hooked beak and small side eyes.
+      plate(ctx, [[-7, -5], [2, -6], [8, -3.5], [14, 1.5], [8, 3], [2, 6], [-7, 5]], p.armor, 1.8);
+      plate(ctx, [[-7, -5], [-2, -6], [-2, 6], [-7, 5]], p.frame, 1.2);
+      plate(ctx, [[8, -1.5], [14, 1.5], [8, 2.5]], p.accent, 1);
+      lens(ctx, 3.5, -3.6, 1.1, p.eye);
+      lens(ctx, 3.5, 3.6, 1.1, p.eye);
+      break;
+    }
+    case "helm": {
+      // Cross: a closed great-helm with a T-slit and a plume trailing back (nothing points forward).
+      plate(ctx, [[-11, -1.4], [0, -1.6], [0, 1.6], [-11, 1.4]], p.trim, 1.2);
+      plate(ctx, [[-6, -6], [4, -6.5], [8, -4], [8, 4], [4, 6.5], [-6, 6]], p.armor, 1.8);
+      ctx.fillStyle = INK;
+      ctx.fillRect(5.6, -4.2, 2, 8.4);
+      ctx.fillRect(2.6, -0.9, 3.4, 1.8);
+      ctx.fillStyle = p.eye;
+      ctx.fillRect(6.1, -3.4, 0.9, 6.8);
+      break;
+    }
   }
 }
 
@@ -229,20 +304,18 @@ export const MECH_BOOSTERS: Record<MechId, BoosterSpec> = {
   serpent: { ports: [[-40, 0]], color: "#4aff9a", core: "#e0ffe8", size: 1.1, pattern: "flicker" },
   storm: { ports: [[-20, -24], [-24, -12], [-24, 12], [-20, 24]], color: "#5ae8ff", core: "#ffffff", size: 0.7, pattern: "stagger" },
   vulture: { ports: [[-26, -9], [-26, 9]], color: "#ff4a3a", core: "#ffd0b0", size: 1.15, pattern: "pulse" },
-  cross: { ports: [[-30, 0], [-22, -10], [-22, 10], [-14, 0]], color: "#ffd84a", core: "#fffbe0", size: 0.9, pattern: "steady" },
+  cross: { ports: [[-32, 0], [-22, -10], [-22, 10], [-12, 0]], color: "#ffd84a", core: "#fffbe0", size: 0.9, pattern: "steady" },
   moth: { ports: [[-14, -4], [-14, 4]], color: "#ffd08a", core: "#fff6e0", size: 0.8, pattern: "pulse" },
   kiln: { ports: [[-24, -6], [-24, 6]], color: "#ff6a1a", core: "#ffe0a0", size: 1.3, pattern: "flicker" },
   kite: { ports: [[-22, 0]], color: "#ff5a8a", core: "#ffe0ec", size: 1.1, pattern: "stagger" },
 };
 
 function torso(ctx: CanvasRenderingContext2D, p: MechaPalette, w: number, h: number) {
-  // armour shell + coloured chest + vents + cockpit, sized per mech
-  plate(ctx, [[-w * 0.8, -h], [w * 0.5, -h], [w, -h * 0.5], [w, h * 0.5], [w * 0.5, h], [-w * 0.8, h]], p.armor, 2.2);
-  plate(ctx, [[-w * 0.35, -h * 0.75], [w * 0.65, -h * 0.7], [w * 0.85, -h * 0.3], [w * 0.85, h * 0.3], [w * 0.65, h * 0.7], [-w * 0.35, h * 0.75]], p.frame, 1.6);
-  ctx.fillStyle = p.crest;
-  ctx.fillRect(w * 0.35, -h * 0.5, w * 0.3, h * 0.22);
-  ctx.fillRect(w * 0.35, h * 0.28, w * 0.3, h * 0.22);
-  plate(ctx, [[-w * 0.15, -h * 0.22], [w * 0.25, -h * 0.22], [w * 0.25, h * 0.22], [-w * 0.15, h * 0.22]], p.trim, 1.2);
+  // Beveled hull, ribbed spine, no chest vents.
+  plate(ctx, [[-w * 0.8, -h], [w * 0.3, -h], [w, -h * 0.35], [w, h * 0.35], [w * 0.3, h], [-w * 0.8, h]], p.armor, 2.2);
+  ctx.fillStyle = p.trim;
+  for (let i = 0; i < 3; i++) ctx.fillRect(-w * 0.72 + i * w * 0.16, -h * 0.72, w * 0.07, h * 1.44);
+  plate(ctx, [[-w * 0.3, -h * 0.62], [w * 0.4, -h * 0.64], [w * 0.78, 0], [w * 0.4, h * 0.64], [-w * 0.3, h * 0.62]], p.frame, 1.6);
 }
 
 function nozzles(ctx: CanvasRenderingContext2D, id: MechId) {
@@ -256,53 +329,65 @@ export function drawMecha(ctx: CanvasRenderingContext2D, id: MechId, weaponKind:
   ctx.save();
   switch (id) {
     case "aether": {
-      // slim interceptor: long swept V-wings, narrow shoulders, long beam rifle
-      both(ctx, [[-10, -6], [-32, -30], [-26, -32], [-4, -10]], p.armor, 1.8);
-      both(ctx, [[-22, -20], [-30, -29], [-27, -30], [-19, -21]], p.frame, 1);
+      // Canopy skiff: forward-swept wings with stabiliser tips, rounded pauldrons, long rifle
+      both(ctx, [[-16, -6], [-6, -29], [-11, -32], [-26, -9]], p.armor, 1.8);
+      both(ctx, [[-6, -29], [-2, -33], [-8, -35], [-11, -32]], p.accent, 1.2);
+      both(ctx, [[-14, -12], [-9, -22], [-11, -23], [-17, -13]], p.frame, 1);
       plate(ctx, [[-20, -7], [-8, -9], [-8, 9], [-20, 7]], "#5a6070", 2);
       nozzles(ctx, id);
-      both(ctx, [[-6, -14], [4, -14], [6, -18], [-4, -20]], p.armor, 1.8);
+      both(ctx, [[-7, -12], [3, -12], [6, -15], [3, -19], [-6, -19], [-9, -15]], p.frame, 1.8);
       plate(ctx, [[0, 7], [12, 7], [12, 14], [0, 14]], p.armor, 1.6);
       weapon(ctx, "beam", p);
       torso(ctx, p, 10, 11);
-      ctx.translate(2, 0);
-      head(ctx, "vfin", p);
+      ctx.translate(1, 0);
+      head(ctx, "canopy", p);
       break;
     }
     case "forge": {
-      // squat heavy artillery: wide tread skirt, twin box missile pods, rotary cannon
+      // Squat siege walker: wide treads, twin back-mounted ammo drums, rotary cannon
       both(ctx, [[-26, -22], [-6, -22], [-6, -12], [-26, -12]], "#2b2f38", 2); // treads
       ctx.fillStyle = "#4a4f5c";
       for (let i = 0; i < 5; i++) for (const sg of [-1, 1]) ctx.fillRect(-25 + i * 4, sg * 17 - 4, 2, 8);
       plate(ctx, [[-24, -11], [-10, -12], [-10, 12], [-24, 11]], p.frame, 2);
       nozzles(ctx, id);
-      both(ctx, [[-12, -14], [10, -14], [12, -30], [-12, -30]], p.armor, 2.2); // huge pods
       for (const sg of [-1, 1]) {
-        ctx.fillStyle = INK;
-        for (let i = 0; i < 4; i++) for (let j = 0; j < 2; j++) ctx.fillRect(-9 + i * 5, sg * (18 + j * 6) - 2, 3.5, 4);
+        // ammo drum: a ringed cylinder seen from above, with a feed belt to the cannon
+        ctx.fillStyle = p.armor;
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.arc(-4, sg * 20, 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        lens(ctx, -4, sg * 20, 4.2, p.frame);
+        ctx.fillStyle = p.accent;
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          ctx.fillRect(-4 + Math.cos(a) * 6.6 - 1, sg * 20 + Math.sin(a) * 6.6 - 1, 2, 2);
+        }
       }
       weapon(ctx, "gatling", p);
       torso(ctx, p, 13, 13);
       ctx.translate(4, 0);
-      head(ctx, "visor", p);
+      head(ctx, "cluster", p);
       break;
     }
     case "scythe": {
-      // tall slim reaper: trailing blade-cloak fins, single central booster, huge glaive arc
-      both(ctx, [[-6, -6], [-30, -18], [-36, -10], [-14, -2]], p.frame, 1.6);
-      both(ctx, [[-8, -8], [-26, -26], [-30, -22], [-12, -6]], p.armor, 1.6);
+      // Beetle reaper: hard elytra shells over thin underwings, one central booster, glaive arc
+      both(ctx, [[-10, -5], [-36, -15], [-38, -11], [-14, -2]], p.frame, 1.4);
+      both(ctx, [[-2, -3], [-8, -12], [-22, -14], [-32, -9], [-28, -3], [-12, -1]], p.armor, 1.8);
+      both(ctx, [[-8, -10], [-22, -12], [-28, -8], [-14, -6]], shade(p.frame, -0.2), 1);
       nozzles(ctx, id);
-      plate(ctx, [[-16, -5], [-6, -7], [-6, 7], [-16, 5]], "#3a3045", 1.8);
       plate(ctx, [[0, 6], [14, 6], [14, 12], [0, 12]], p.armor, 1.6);
       weapon(ctx, "melee", p);
       plate(ctx, [[-8, -9], [8, -8], [14, -3], [14, 3], [8, 8], [-8, 9]], p.armor, 2); // narrow long torso
       plate(ctx, [[-2, -6], [9, -5], [12, 0], [9, 5], [-2, 6]], p.frame, 1.4);
-      ctx.translate(5, 0);
-      head(ctx, "horn", p);
+      ctx.translate(6, 0);
+      head(ctx, "mandible", p);
       break;
     }
     case "dune": {
-      // round hover-tank: circular skirt, big tower shield in front, stubby shotgun
+      // Round hover-tank: circular skirt, side sponsons, tower shield, turret dome
       ctx.fillStyle = shade(p.frame, -0.1);
       ctx.strokeStyle = INK;
       ctx.lineWidth = 2.2;
@@ -311,52 +396,58 @@ export function drawMecha(ctx: CanvasRenderingContext2D, id: MechId, weaponKind:
       ctx.fill();
       ctx.stroke();
       nozzles(ctx, id);
-      both(ctx, [[-10, -12], [8, -12], [10, -22], [-8, -24]], p.armor, 2);
+      both(ctx, [[-14, -13], [6, -13], [9, -17], [6, -22], [-14, -22], [-17, -17]], p.armor, 2); // sponsons
       plate(ctx, [[8, 8], [26, 8], [30, 11], [30, 15], [8, 15]], "#4a4f5c", 1.8);
       torso(ctx, p, 11, 12);
       plate(ctx, [[14, -26], [24, -20], [26, 0], [24, 4], [14, 2]], p.armor, 2.4); // tower shield
       plate(ctx, [[17, -20], [22, -16], [22, -6], [17, -8]], p.trim, 1.2);
-      ctx.translate(0, 0);
-      head(ctx, "crest", p);
+      head(ctx, "dome", p);
       break;
     }
     case "serpent": {
-      // long segmented predator: tail segments trailing, claw fangs forward, no wings
+      // Hammerhead eel: trailing tail segments, swept pectoral fins, forked emitter
       for (let i = 3; i >= 1; i--) {
         const x = -10 - i * 8;
         const r = 7 - i;
         plate(ctx, [[x - r, -r], [x + r, -r - 1], [x + r + 2, 0], [x + r, r + 1], [x - r, r]], i % 2 ? p.armor : p.frame, 1.6);
       }
       nozzles(ctx, id);
-      both(ctx, [[2, -10], [20, -14], [26, -8], [10, -6]], p.armor, 1.8); // claw arms
-      both(ctx, [[20, -14], [30, -12], [26, -8]], "#d8f0e0", 1.2);
+      both(ctx, [[0, -8], [-6, -21], [-14, -23], [-8, -7]], p.armor, 1.8); // pectoral fins
+      both(ctx, [[-6, -21], [-14, -23], [-11, -19]], p.accent, 1.1);
       plate(ctx, [[-12, -9], [6, -10], [12, -4], [12, 4], [6, 10], [-12, 9]], p.armor, 2);
       plate(ctx, [[-6, -6], [8, -6], [10, 0], [8, 6], [-6, 6]], p.frame, 1.4);
       weapon(ctx, "fang", p);
-      ctx.translate(3, 0);
-      head(ctx, "vfin", p);
+      ctx.translate(4, 0);
+      head(ctx, "hammer", p);
       break;
     }
     case "storm": {
-      // delta-wing caster: broad triangular wings, 4 floating bits, edge boosters
+      // Delta-wing caster: broad triangular wings, 4 ringed capacitor orbs, edge boosters
       both(ctx, [[-4, -8], [-24, -32], [-18, -8]], p.armor, 2);
       both(ctx, [[-10, -12], [-20, -26], [-16, -12]], p.frame, 1.2);
       for (const [x, y] of [[8, -28], [8, 28], [-4, -36], [-4, 36]] as const) {
-        plate(ctx, [[x - 4, y - 2], [x + 4, y - 3], [x + 6, y], [x + 4, y + 3], [x - 4, y + 2]], p.crest, 1.4);
-        lens(ctx, x + 3, y, 1.2, p.eye);
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, 4.6, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = p.accent;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        lens(ctx, x, y, 2.2, p.eye);
       }
       nozzles(ctx, id);
       plate(ctx, [[-14, -6], [-6, -8], [-6, 8], [-14, 6]], "#5a6070", 1.8);
       weapon(ctx, "arc", p);
       torso(ctx, p, 10, 10);
-      ctx.translate(2, 0);
-      head(ctx, "vfin", p);
+      ctx.translate(1, 0);
+      head(ctx, "halo", p);
       break;
     }
     case "vulture": {
-      // hunched gunship: folded forward talon-wings, spine-length mortar cannon
+      // Hunched gunship: folded forward talon-wings, spine-length mortar cannon, raptor hood
       both(ctx, [[-14, -10], [6, -26], [12, -22], [-6, -8]], p.frame, 1.8);
-      both(ctx, [[6, -26], [16, -26], [12, -22]], "#d9d9d9", 1.2);
+      both(ctx, [[6, -26], [16, -26], [12, -22]], p.accent, 1.2);
       plate(ctx, [[-22, -10], [-10, -12], [-10, 12], [-22, 10]], p.frame, 2);
       nozzles(ctx, id);
       torso(ctx, p, 12, 12);
@@ -366,21 +457,35 @@ export function drawMecha(ctx: CanvasRenderingContext2D, id: MechId, weaponKind:
       ctx.fillRect(-4, -2, 10, 4);
       ctx.translate(-2, 9);
       ctx.scale(0.85, 0.85);
-      head(ctx, "horn", p);
+      head(ctx, "beak", p);
       break;
     }
     case "cross": {
-      // tall knight: cross-shaped booster frame, long tabard panels, giant lance
-      plate(ctx, [[-30, -3], [-8, -3], [-8, 3], [-30, 3]], p.frame, 1.8); // cross spine
-      plate(ctx, [[-23, -14], [-19, -14], [-19, 14], [-23, 14]], p.frame, 1.8); // cross bar
+      // Sun-ring knight: ring-shaped booster frame, long tabard panels, disc pauldrons, giant lance
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 6.5;
+      ctx.beginPath();
+      ctx.arc(-22, 0, 10, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = p.frame;
+      ctx.lineWidth = 3.6;
+      ctx.stroke();
       both(ctx, [[-4, -12], [-24, -18], [-26, -14], [-6, -8]], p.armor, 1.6); // tabard panels
       nozzles(ctx, id);
-      both(ctx, [[-8, -12], [8, -12], [10, -20], [-6, -24]], p.armor, 2);
-      both(ctx, [[-4, -22], [6, -19], [4, -16], [-6, -18]], p.crest, 1.2);
+      for (const sg of [-1, 1]) {
+        ctx.fillStyle = p.armor;
+        ctx.strokeStyle = INK;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, sg * 17, 7.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        lens(ctx, 0, sg * 17, 3.4, p.accent);
+      }
       weapon(ctx, "lance", p);
       torso(ctx, p, 11, 12);
       ctx.translate(3, 0);
-      head(ctx, "cross", p);
+      head(ctx, "helm", p);
       break;
     }
     case "moth": {
@@ -416,7 +521,7 @@ export function drawMecha(ctx: CanvasRenderingContext2D, id: MechId, weaponKind:
           ctx.lineWidth = 2;
           ctx.stroke();
           // small eye-spot near the tip
-          lens(ctx, 0, sg * len * 0.7, Math.max(1.6, width * 0.16), p.crest);
+          lens(ctx, 0, sg * len * 0.7, Math.max(1.6, width * 0.16), p.accent);
           ctx.restore();
         }
       };
@@ -425,9 +530,9 @@ export function drawMecha(ctx: CanvasRenderingContext2D, id: MechId, weaponKind:
       nozzles(ctx, id);
       // lantern abdomen (segmented, glowing)
       ctx.save();
-      ctx.shadowColor = p.crest;
+      ctx.shadowColor = p.accent;
       ctx.shadowBlur = 10;
-      plate(ctx, [[-26, -5], [-14, -7], [-10, 0], [-14, 7], [-26, 5], [-30, 0]], p.crest, 1.8);
+      plate(ctx, [[-26, -5], [-14, -7], [-10, 0], [-14, 7], [-26, 5], [-30, 0]], p.accent, 1.8);
       ctx.restore();
       ctx.fillStyle = INK;
       ctx.fillRect(-22, -6, 1.4, 12);
@@ -501,9 +606,9 @@ export function drawMecha(ctx: CanvasRenderingContext2D, id: MechId, weaponKind:
       ctx.stroke();
       // glowing core in the centre plate
       ctx.save();
-      ctx.shadowColor = p.crest;
+      ctx.shadowColor = p.accent;
       ctx.shadowBlur = 8;
-      lens(ctx, -3, 0, 3.4, p.crest);
+      lens(ctx, -3, 0, 3.4, p.accent);
       ctx.restore();
       // chimney stack (offset, smoking)
       plate(ctx, [[-16, -6], [-8, -6], [-8, -1], [-16, -1]], p.trim, 1.6);
@@ -511,7 +616,7 @@ export function drawMecha(ctx: CanvasRenderingContext2D, id: MechId, weaponKind:
       ctx.fillRect(-14.5, -5, 5, 3);
       // ember grate snout
       plate(ctx, [[16, -7], [26, -5], [28, 0], [26, 5], [16, 7]], p.frame, 2);
-      ctx.fillStyle = p.crest;
+      ctx.fillStyle = p.accent;
       for (const y of [-3, 0, 3]) ctx.fillRect(20, y - 0.8, 6, 1.6);
       lens(ctx, 18, -5, 1.3, p.eye);
       lens(ctx, 18, 5, 1.3, p.eye);
@@ -528,8 +633,8 @@ export function drawMecha(ctx: CanvasRenderingContext2D, id: MechId, weaponKind:
       for (const i of [2, 4, 6]) {
         const x = -14 - i * 4.5;
         const y = Math.sin(i * 1.3) * 4;
-        plate(ctx, [[x, y], [x - 3, y - 4], [x + 3, y - 4]], p.crest, 1);
-        plate(ctx, [[x, y], [x + 3, y + 4], [x - 3, y + 4]], p.crest, 1);
+        plate(ctx, [[x, y], [x - 3, y - 4], [x + 3, y - 4]], p.accent, 1);
+        plate(ctx, [[x, y], [x + 3, y + 4], [x - 3, y + 4]], p.accent, 1);
       }
       nozzles(ctx, id);
       // diamond sail, two-tone halves
@@ -577,51 +682,40 @@ const GRUNT: Record<string, GruntStyle> = {
   charger: { armor: "#c46a2a", dark: "#7a3c14", eye: "#ffd04a" },
   sniper: { armor: "#5a4a7a", dark: "#342a4c", eye: "#ff4a6a" },
   shielder: { armor: "#4a6a8a", dark: "#2a3e54", eye: "#ff4a6a" },
-  ace: { armor: "#c42e2e", dark: "#701818", eye: "#ff9ad0" },
+  ace: { armor: "#2c2c3a", dark: "#16161e", eye: "#ffcf4a" },
   titan: { armor: "#5a4a3c", dark: "#2e241c", eye: "#ff4a2a" },
 };
 
-function monoHead(ctx: CanvasRenderingContext2D, s: GruntStyle, r = 6, horn = false) {
-  ctx.fillStyle = s.armor;
-  ctx.strokeStyle = INK;
-  ctx.lineWidth = 1.8;
-  ctx.beginPath();
-  ctx.arc(0, 0, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.save();
-  ctx.clip();
-  ctx.fillStyle = s.dark;
-  ctx.fillRect(-r, r * 0.15, r * 2, r);
-  ctx.restore();
-  ctx.stroke();
-  // mono-eye rail + eye
-  ctx.fillStyle = INK;
-  ctx.fillRect(r * 0.3, -r * 0.7, r * 0.6, r * 1.4);
-  lens(ctx, r * 0.65, 0, r * 0.28, s.eye);
-  if (horn) plate(ctx, [[0, -2], [r + 9, -1], [r + 9, 1], [0, 2]], "#f2d24a", 1.2);
+/** Drone-pilot head: a hex shell with three eyes in a triangle. */
+function triHead(ctx: CanvasRenderingContext2D, s: GruntStyle, r = 6, lead = false) {
+  const hex: Pt[] = [];
+  for (let i = 0; i < 6; i++) hex.push([Math.cos((i / 6) * Math.PI * 2 + Math.PI / 6) * r, Math.sin((i / 6) * Math.PI * 2 + Math.PI / 6) * r]);
+  plate(ctx, hex, s.armor, 1.8);
+  plate(ctx, [[r * 0.15, -r * 0.62], [r * 0.95, -r * 0.3], [r * 0.95, r * 0.3], [r * 0.15, r * 0.62]], INK, 1);
+  lens(ctx, r * 0.72, 0, r * 0.2, s.eye);
+  lens(ctx, r * 0.38, -r * 0.34, r * 0.16, s.eye);
+  lens(ctx, r * 0.38, r * 0.34, r * 0.16, s.eye);
+  // squad leader: a gold stripe across the crown and a rear sensor bar
+  if (lead) {
+    plate(ctx, [[-r * 0.9, -1.2], [r * 0.1, -1.2], [r * 0.1, 1.2], [-r * 0.9, 1.2]], "#e8b83a", 1);
+    plate(ctx, [[-r - 4, -4], [-r + 1, -4], [-r + 1, 4], [-r - 4, 4]], s.dark, 1.2);
+  }
 }
 
-function grunt(ctx: CanvasRenderingContext2D, s: GruntStyle, opts: { heavy?: boolean; horn?: boolean; weapon?: "mg" | "rifle" | "axe" | "shield" | "cannon" }) {
+function grunt(ctx: CanvasRenderingContext2D, s: GruntStyle, opts: { heavy?: boolean; lead?: boolean; weapon?: "mg" | "rifle" | "axe" | "shield" | "cannon" }) {
   const k = opts.heavy ? 1.25 : 1;
   ctx.save();
   ctx.scale(k, k);
   plate(ctx, [[-16, -8], [-8, -10], [-8, 10], [-16, 8]], s.dark, 1.8); // backpack
   thruster(ctx, -21, 0, 6, 8, "#ff8a5c");
-  // rounded shoulders, spiked on the left
-  both(ctx, [[-8, -10], [4, -10], [6, -16], [-2, -19], [-10, -15]], s.armor, 1.8);
-  if (opts.horn || opts.weapon === "axe") {
-    for (const [x, y] of [[-6, -19], [0, -20]] as const) plate(ctx, [[x - 2, y + 2], [x, y - 5], [x + 2, y + 2]], "#d8d8d8", 1);
-  }
+  // squared, symmetric shoulder blocks
+  both(ctx, [[-9, -10], [5, -10], [5, -17], [-9, -17]], s.armor, 1.8);
+  both(ctx, [[-6, -15], [2, -15], [2, -17], [-6, -17]], s.dark, 1);
   // body
   plate(ctx, [[-10, -10], [6, -10], [10, -4], [10, 4], [6, 10], [-10, 10]], s.armor, 2);
-  // hoses (signature grunt detail)
-  ctx.strokeStyle = INK;
-  ctx.lineWidth = 1;
-  for (const sgn of [-1, 1]) {
-    ctx.beginPath();
-    for (let i = 0; i < 4; i++) ctx.arc(-2 + i * 2.5, sgn * 6, 1.2, 0, Math.PI * 2);
-    ctx.stroke();
-  }
+  // armour ribs across the back plate
+  ctx.fillStyle = s.dark;
+  for (let i = 0; i < 3; i++) ctx.fillRect(-8 + i * 3, -7, 1.6, 14);
   // weapon
   const w = opts.weapon ?? "mg";
   if (w === "mg") plate(ctx, [[2, 8], [20, 8], [20, 13], [2, 13]], "#3a3f4c", 1.6);
@@ -639,7 +733,7 @@ function grunt(ctx: CanvasRenderingContext2D, s: GruntStyle, opts: { heavy?: boo
     plate(ctx, [[22, -21], [26, -21], [26, -13], [22, -13]], INK, 1);
   }
   ctx.translate(1, 0);
-  monoHead(ctx, s, 6, opts.horn);
+  triHead(ctx, s, 6, opts.lead);
   ctx.restore();
 }
 
@@ -647,7 +741,7 @@ function grunt(ctx: CanvasRenderingContext2D, s: GruntStyle, opts: { heavy?: boo
 export function drawMechaEnemy(ctx: CanvasRenderingContext2D, kind: string): boolean {
   switch (kind) {
     case "drone": {
-      // spherical mono-eye pod with stub fins
+      // spherical scout pod with stub fins and a ring sensor
       both(ctx, [[-8, -4], [-14, -9], [-12, -3]], "#6a5a4a", 1.4);
       ctx.fillStyle = "#8a7258";
       ctx.strokeStyle = INK;
@@ -661,9 +755,14 @@ export function drawMechaEnemy(ctx: CanvasRenderingContext2D, kind: string): boo
       ctx.fillRect(-8, 1.5, 16, 8);
       ctx.restore();
       ctx.stroke();
-      ctx.fillStyle = INK;
-      ctx.fillRect(2, -4, 4, 8);
-      lens(ctx, 4.5, 0, 2, "#ff3a4a");
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.arc(4, 0, 2.6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = "#ff3a4a";
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
       return true;
     }
     case "swarm":
@@ -719,13 +818,13 @@ export function drawMechaEnemy(ctx: CanvasRenderingContext2D, kind: string): boo
       return true;
     }
     case "ace":
-      // commander custom: sleeker, horned, twin thrusters
-      grunt(ctx, GRUNT.ace!, { horn: true, weapon: "rifle" });
-      thruster(ctx, -26, -6, 5, 5, "#ff9ad0");
-      thruster(ctx, -26, 6, 5, 5, "#ff9ad0");
+      // squad leader: black and gold, sensor bar, twin thrusters
+      grunt(ctx, GRUNT.ace!, { lead: true, weapon: "rifle" });
+      thruster(ctx, -26, -6, 5, 5, "#ffcf4a");
+      thruster(ctx, -26, 6, 5, 5, "#ffcf4a");
       return true;
     case "titan": {
-      // mobile armour: wide hull, claw arms, big mono-eye
+      // siege crab: wide hull, claw arms, triple sensor cluster
       const s = GRUNT.titan!;
       both(ctx, [[-4, -14], [16, -24], [26, -18], [22, -12], [8, -10]], s.dark, 2); // claw arm
       both(ctx, [[20, -20], [30, -16], [24, -14]], "#d8d8d8", 1.2); // claw tips
@@ -733,13 +832,14 @@ export function drawMechaEnemy(ctx: CanvasRenderingContext2D, kind: string): boo
       plate(ctx, [[-20, -10], [0, -12], [8, -6], [8, 6], [0, 12], [-20, 10]], s.dark, 1.6);
       thruster(ctx, -32, -9, 7, 8, "#ff8a5c");
       thruster(ctx, -32, 9, 7, 8, "#ff8a5c");
-      ctx.fillStyle = INK;
-      ctx.fillRect(8, -7, 6, 14);
-      lens(ctx, 11, 0, 3.4, s.eye);
+      plate(ctx, [[6, -8], [16, -6], [16, 6], [6, 8]], INK, 1.2);
+      lens(ctx, 13, 0, 2.6, s.eye);
+      lens(ctx, 9.5, -4, 1.7, s.eye);
+      lens(ctx, 9.5, 4, 1.7, s.eye);
       return true;
     }
     case "warden": {
-      // fortress mobile armour: hexagonal core ringed by weapon pods
+      // fortress war machine: hexagonal core ringed by weapon pods
       for (let i = 0; i < 6; i++) {
         ctx.save();
         ctx.rotate((i / 6) * Math.PI * 2);

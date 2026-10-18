@@ -320,3 +320,14 @@ test("elite fights and boss rush configs + capped rewards", () => {
   assert.equal(capBossCores(6, false, DAILY_BOSS_CORE_CAP - 2), 2);
   assert.equal(capBossCores(30, true, DAILY_BOSS_CORE_CAP), 30);
 });
+
+test("art and content sources carry no mobile-suit franchise names or signature parts", async () => {
+  const { readFileSync } = await import("node:fs");
+  const banned =
+    /gundam|mobile[ -]suit|mobile[ -]armou?r|zaku|zeon|\bRX-\d|deathscythe|heavyarms|sandrock|shenlong|wing zero|zero buster|dragon fang|v-?fin|mono-?eye|newtype|funnels?\b/i;
+  for (const f of ["../data.ts", "../mecha.ts", "./gear.ts", "./crates.ts", "../../components/menu/pilots-tab.tsx"]) {
+    const src = readFileSync(new URL(f, import.meta.url), "utf8");
+    const hit = src.match(banned);
+    assert.equal(hit, null, `${f}: ${hit?.[0]}`);
+  }
+});

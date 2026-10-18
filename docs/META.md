@@ -79,6 +79,23 @@ The odds are always shown on each crate card. Play's loot-box policy requires di
 
 There are 8 existing mechs, unlocked with credits as before, plus **3 new original vault mechs** that come only from the Prism Vault. All art is drawn in code in the game's cel-shaded ink style. None of them copy existing franchises: no V-fins, mono-eyes or franchise silhouettes, and no memes or real people.
 
+### Original lineup redesign
+
+The 8 credit mechs were redesigned so none of them resembles a mobile-suit franchise. That means no V-fin or antenna crests, no twin-eye faceplate with chin vents, no chest vents, and no white/blue/red/yellow hero colour scheme. Enemies lost the mono-eye rail, chest hoses, spiked shoulder and red horned commander. Ids and stats are unchanged, so saves and hitboxes are unaffected. See `docs/mech-lineup.png`.
+
+| Id | Name | Head | Silhouette / colours |
+|---|---|---|---|
+| aether | **Aether Skiff** | Glass cockpit canopy on a teardrop nose | Forward-swept wings with mint tips, hex pauldrons; mint, teal and orange |
+| forge | **Forge Rampart** | Boxy block with a 2×3 spider-eye lens grid | Twin back-mounted ammo drums replace the shoulder missile boxes; steel and lime |
+| scythe | **Night Reaver** | Wedge head with compound eyes and inward-curling mandibles | Beetle elytra shells over thin underwings replace the cloak fins; violet with lime eyes |
+| dune | Dune Shield | Round turret dome with a wraparound visor band and top hatch | Hex side sponsons, tower shield; sand and rust |
+| serpent | **Jade Hammerhead** | Angular hammerhead bar with lenses at the tips | Pectoral fins replace the claw arms; jade, bone and lime |
+| storm | Storm Warden | Round head inside a sensor ring with three nodes | Ringed capacitor orbs replace the floating fin bits; indigo and electric cyan |
+| vulture | Iron Vulture | Hooded raptor head with a hooked bone beak | Folded talon-wings, spine cannon; oxblood and black |
+| cross | Solar Cross | Closed great-helm with a T-slit and a trailing plume | A sun-ring booster frame replaces the X-shaped one, disc pauldrons; ivory, gold and teal |
+
+Enemy grunts now have hex heads with three eyes in a triangle, squared shoulders and ribbed back plates. The Ace is a black-and-gold squad leader with a sensor bar. The Titan has a triple sensor cluster. Renamed skills and text: "Zero Buster" is now **Prism Sweep**, and the "wing-mounted buster" and "dragon fang" blurbs were rewritten.
+
 | Mech | Pilot | Role | Look | Weapon | Skill |
 |---|---|---|---|---|---|
 | **Lantern Moth** | Lumen | Controller | Teardrop dust-wings with eye-spots, feathery antennae, glowing lantern abdomen | Light motes: slow, strongly homing, 3+ per volley | **Lure Lamp**: a lamp ahead pulls nearby non-boss hostiles in for 3 s, then bursts (5× damage, 150 radius) |
