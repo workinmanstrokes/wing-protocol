@@ -16,6 +16,7 @@ import {
 import { applyMissionEvents, claimMission, dayKey, refreshMissions, type MissionEvent } from "./meta/missions";
 import { capBossCores, eliteReward, type BossKind } from "./meta/modes";
 import { floorCredits, towerMilestoneCores } from "./meta/tower";
+import { bumpExtract, canDoubleExtract, extractAdsLeft } from "./meta/extract";
 import { MECH_MAP } from "./data";
 
 /** Same storage key as v1 so existing saves are found and migrated in place. */
@@ -279,6 +280,24 @@ export function settleSortie(r: RunResult): RunPayout {
     ),
   );
   return { credits: r.credits, keys: r.keys, cores, shards, newItems: r.loot.length };
+}
+
+/** Extract-ad uses left today. */
+export function extractAdsLeftToday(now = Date.now()): number {
+  return extractAdsLeft(dayKey(new Date(now)), state.adExtract);
+}
+
+/**
+ * Rewarded "extract with 2x loot": bank the run's credits, keys and salvage a
+ * second time (duplicate parts become shards). Call only after the ad reward was
+ * earned. Returns the extra payout, or null if not allowed (cap / not an extraction).
+ */
+export function doubleExtractLoot(r: RunResult, now = Date.now()): RunPayout | null {
+  const today = dayKey(new Date(now));
+  if (!canDoubleExtract(r) || extractAdsLeft(today, state.adExtract) <= 0) return null;
+  set({ ...state, adExtract: bumpExtract(today, state.adExtract) });
+  const shards = addLoot(r.credits, r.keys, r.loot);
+  return { credits: r.credits, keys: r.keys, cores: 0, shards, newItems: 0 };
 }
 
 /** Settle an elite fight or boss rush. */

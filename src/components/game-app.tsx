@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Pause, Play, Volume2, VolumeX } from "lucide-react";
+import { Pause, Play, PlayCircle, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Combat } from "@/game/combat";
@@ -7,6 +7,8 @@ import { MECH_MAP, PERK_MAP } from "@/game/data";
 import { GameAudio } from "@/game/audio";
 import { GameInput } from "@/game/input";
 import {
+  doubleExtractLoot,
+  extractAdsLeftToday,
   getSave,
   settleBossFight,
   settleSortie,
@@ -15,6 +17,9 @@ import {
   type RunPayout,
 } from "@/game/save";
 import { bossRushConfig, eliteConfig, sortieConfig, type RunConfig } from "@/game/meta/modes";
+import { canDoubleExtract } from "@/game/meta/extract";
+import { showRewardedAd } from "@/game/meta/ads";
+import { portalCommercialBreak, portalGameplay, portalLoadingFinished } from "@/game/portal";
 import {
   isBossFloor,
   rollBuff,
@@ -83,6 +88,15 @@ export function GameApp() {
   useEffect(() => {
     audioRef.current.setMuted(muted);
   }, [muted]);
+
+  // Web portals (no-op elsewhere): loading done once the menu is up; gameplay = live, unpaused combat.
+  useEffect(() => {
+    void portalLoadingFinished();
+  }, []);
+  const live = screen === "combat" && !hud?.paused && !choices;
+  useEffect(() => {
+    void portalGameplay(live);
+  }, [live]);
 
   const bankTower = (t: TowerRun) => {
     const p = settleTower(t.cleared);
@@ -267,7 +281,11 @@ export function GameApp() {
         <Results
           outcome={outcome}
           onMenu={() => setScreen("menu")}
-          onAgain={() => run && start(run.spec)}
+          onAgain={async () => {
+            // Natural break between runs: a portal may show a commercial break here (never mid-run).
+            await portalCommercialBreak();
+            if (run) start(run.spec);
+          }}
         />
       )}
     </div>
@@ -535,6 +553,10 @@ function PauseMenu({ onResume, onQuit }: { onResume: () => void; onQuit: () => v
 function Results({ outcome, onMenu, onAgain }: { outcome: Outcome; onMenu: () => void; onAgain: () => void }) {
   const { result, payout, tower } = outcome;
   const t = Math.floor(result.time);
+  const [ad, setAd] = useState<"idle" | "playing" | "failed">("idle");
+  const [bonus, setBonus] = useState<RunPayout | null>(null);
+  const adsLeft = extractAdsLeftToday();
+  const offer2x = !tower && canDoubleExtract(result) && !bonus;
   return (
     <div className="flex h-full flex-col items-center justify-center overflow-y-auto p-5" data-testid="results">
       <div className="w-full max-w-lg rounded-xl border border-border bg-surface p-6">
@@ -561,7 +583,36 @@ function Results({ outcome, onMenu, onAgain }: { outcome: Outcome; onMenu: () =>
           <p className="mt-1">
             <RewardLine reward={{ credits: payout.credits, cores: payout.cores, shards: payout.shards, keys: payout.keys }} />
           </p>
+          {bonus && (
+            <p className="mt-1 text-legend" data-testid="extract-bonus">
+              2× extract bonus: <RewardLine reward={{ credits: bonus.credits, shards: bonus.shards, keys: bonus.keys }} />
+            </p>
+          )}
         </div>
+        {offer2x && (
+          <div className="mt-3 rounded-lg border border-legend/50 bg-elevated p-3">
+            <button
+              type="button"
+              data-testid="extract-2x"
+              disabled={adsLeft <= 0 || ad === "playing"}
+              onClick={async () => {
+                setAd("playing");
+                const ok = await showRewardedAd(3);
+                const extra = ok ? doubleExtractLoot(result) : null;
+                setBonus(extra);
+                setAd(extra ? "idle" : "failed");
+              }}
+              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-legend/90 px-3 text-sm font-semibold text-bg disabled:opacity-40"
+            >
+              <PlayCircle className="size-4" />
+              {ad === "playing" ? "Ad playing…" : adsLeft > 0 ? "Watch ad: extract with 2× loot" : "2× extract back tomorrow"}
+            </button>
+            <p className="mt-1 text-center text-[11px] text-muted">
+              Optional. Doubles credits, keys and salvage (not cores). {adsLeft}/3 left today.
+              {ad === "failed" ? " No reward this time." : ""}
+            </p>
+          </div>
+        )}
         {result.evolutions && result.evolutions.length > 0 && (
           <p className="mt-3 text-sm text-muted">
             Evolved: <span className="text-fg">{result.evolutions.join(", ")}</span>
