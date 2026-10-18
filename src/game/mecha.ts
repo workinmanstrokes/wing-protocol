@@ -113,16 +113,17 @@ export interface BoosterSpec {
   size: number; // flame radius scale
   pattern: "steady" | "pulse" | "flicker" | "stagger";
 }
-// Ports for the 8 metal mechs sit on each SVG's nozzles, scaled by MECH_ART_SCALE (0.75).
+// Ports for the 8 SVG mechs sit on each sprite's rear nozzle, scaled by MECH_ART_SCALE (0.75);
+// flame colours match each sprite's glow (and the mech accent in data.ts where set).
 export const MECH_BOOSTERS: Record<MechId, BoosterSpec> = {
-  aether: { ports: [[-13, 0]], color: "#5ec8e8", core: "#eafcff", size: 1.2, pattern: "steady" },
-  forge: { ports: [[-17, -6], [-17, 6]], color: "#ff8a2a", core: "#ffe0a0", size: 0.95, pattern: "stagger" },
-  scythe: { ports: [[-11, 0]], color: "#e8c84a", core: "#fff4d0", size: 1.2, pattern: "flicker" },
-  dune: { ports: [[-13, 0]], color: "#ffb84a", core: "#fff0c0", size: 1.1, pattern: "pulse" },
-  serpent: { ports: [[-12, 0]], color: "#7ae0a0", core: "#e0ffe8", size: 1, pattern: "flicker" },
-  storm: { ports: [[-8, 0]], color: "#4ad8ff", core: "#ffffff", size: 1, pattern: "stagger" },
-  vulture: { ports: [[-21, 0]], color: "#ff8a3a", core: "#ffd0b0", size: 1.2, pattern: "pulse" },
-  cross: { ports: [[-23, 0]], color: "#ffd84a", core: "#fffbe0", size: 1.1, pattern: "steady" },
+  aether: { ports: [[-13.5, 0]], color: "#ff8a4a", core: "#fff0e0", size: 1.2, pattern: "steady" },
+  forge: { ports: [[-17, -5], [-17, 5]], color: "#ff9a3a", core: "#ffe8b0", size: 0.95, pattern: "stagger" },
+  scythe: { ports: [[-13, 0]], color: "#3aff7a", core: "#d0ffe0", size: 1.2, pattern: "flicker" },
+  dune: { ports: [[-24, 0]], color: "#5ab8ff", core: "#e0f4ff", size: 1.1, pattern: "pulse" },
+  serpent: { ports: [[-14, 0]], color: "#8ae0ff", core: "#eafcff", size: 1.1, pattern: "flicker" },
+  storm: { ports: [[-10, 0]], color: "#ff3a7a", core: "#ffd8e6", size: 1, pattern: "stagger" },
+  vulture: { ports: [[-12, 0]], color: "#7ae070", core: "#e0ffd8", size: 1.1, pattern: "pulse" },
+  cross: { ports: [[-8, 0]], color: "#5ae0ff", core: "#e8fcff", size: 1.1, pattern: "steady" },
   moth: { ports: [[-14, -4], [-14, 4]], color: "#ffd08a", core: "#fff6e0", size: 0.8, pattern: "pulse" },
   kiln: { ports: [[-24, -6], [-24, 6]], color: "#ff6a1a", core: "#ffe0a0", size: 1.3, pattern: "flicker" },
   kite: { ports: [[-22, 0]], color: "#ff5a8a", core: "#ffe0ec", size: 1.1, pattern: "stagger" },

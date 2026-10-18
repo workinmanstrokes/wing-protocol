@@ -79,14 +79,14 @@ The odds are always shown on each crate card. Play's loot-box policy requires di
 
 There are 8 existing mechs, unlocked with credits as before, plus **3 new original vault mechs** that come only from the Prism Vault. All art is drawn in code in the game's cel-shaded ink style. None of them copy existing franchises: no V-fins, mono-eyes or franchise silhouettes, and no memes or real people.
 
-### Shaded-metal art for the original 8
+### Reference-themed metal art for the original 8
 
-The 8 credit mechs (Aether Wing, Heavy Forge, Night Scythe, Dune Shield, Jade Serpent, Storm Warden, Iron Vulture, Solar Cross) use the Lead Sprite Designer's **shaded-metal** art: bevelled plates, metallic gradients, rivets and a soft drop shadow, with light from the top-left. None of them uses mobile-suit franchise traits.
+The 8 credit mechs (Aether Wing, Heavy Forge, Night Scythe, Dune Shield, Jade Serpent, Storm Warden, Iron Vulture, Solar Cross) use the Lead Sprite Designer's **reference-themed shaded-metal set**. These are original top-down redesigns themed on Michael's reference sheet, not traced from it: bevelled metal, gradients, rivets and a soft drop shadow, with light from the top-left. Five mechs use new accents (used for the player light, the UI and the booster flames): Night Scythe `#3aff7a`, Jade Serpent `#8ae0ff`, Storm Warden `#ff3a7a`, Iron Vulture `#7ae070`, Solar Cross `#5ae0ff`.
 
 - **Source:** `src/game/art/mechs/*.svg`. They are authored top-down, nose right, in a 96-unit box centred on the mech. `src/game/mech-art.ts` inlines them as data URLs, so they work offline, in the PWA and in Capacitor.
 - **Sharpness:** each draw rasterises the vector at the destination size. The combat sprite cache renders it at 2x, and the Hangar/Pilots portraits and the menu background render it at device pixel ratio, so it stays sharp on retina.
-- **Scale and hitbox:** `MECH_ART_SCALE = 0.75`, so the 96-unit box draws at 72 px. The widest parts (Aether's wing binders, Night Scythe's glaive, Jade Serpent's tail, Solar Cross's lance) stay inside about ±35 px, close to the old roughly 64–72 px footprint. The player hit radius is **unchanged at 16 px**, roughly the size of each mech's solid body (equivalent radius 15–21 px at this scale). Wings, tails and glows are purely visual and extend past the hitbox, which favours the player.
-- **Boosters:** `MECH_BOOSTERS` ports sit on each SVG's nozzles at the 0.75 scale.
+- **Scale and hitbox:** `MECH_ART_SCALE = 0.75`, so the 96-unit box draws at 72 px. Every mech's solid parts stay inside about ±35 px, close to the old roughly 64–72 px footprint. The player hit radius is **unchanged at 16 px**, roughly the size of each mech's solid body (equivalent radius 16–21 px at this scale). Wings, tails and glows are purely visual and extend past the hitbox, which favours the player.
+- **Boosters:** `MECH_BOOSTERS` ports sit on each sprite's rear nozzle at the 0.75 scale, and the flame colours match each sprite's glow.
 - **Vault mechs:** the 3 vault mechs are still drawn in code in the older ink style (thick black outlines, flat two-tone fills). They match the metal mechs in size but not in rendering style.
 - **Enemies:** grunts have hex heads with three eyes in a triangle, squared shoulders and ribbed back plates. The Ace is a black-and-gold squad leader. The Titan has a triple sensor cluster.
 - See `docs/mech-lineup.png`.

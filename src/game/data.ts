@@ -48,7 +48,7 @@ export const MECHS: MechDef[] = [
     blurb: "Beam glaive and phantom dash. High burst, lives in the melee.",
     unlockCost: 1200,
     color: "#1a1c22",
-    accent: "#c4a574",
+    accent: "#3aff7a",
     stats: { hp: 110, speed: 236, fireRate: 3.2, damage: 38, range: 150 },
     weapon: "melee",
     skill: {
@@ -82,7 +82,7 @@ export const MECHS: MechDef[] = [
     blurb: "Dragon fang and coiling orbs. Flexible mid-range predator.",
     unlockCost: 2000,
     color: "#2d6b4a",
-    accent: "#c4b07a",
+    accent: "#8ae0ff",
     stats: { hp: 118, speed: 220, fireRate: 4.2, damage: 14, range: 380 },
     weapon: "fang",
     skill: {
@@ -99,7 +99,7 @@ export const MECHS: MechDef[] = [
     blurb: "Chain-lightning zapper. Every bolt jumps to the next closest hull.",
     unlockCost: 2500,
     color: "#c8d8f0",
-    accent: "#4ad8ff",
+    accent: "#ff3a7a",
     stats: { hp: 104, speed: 214, fireRate: 3.8, damage: 11, range: 320 },
     weapon: "arc",
     skill: {
@@ -116,7 +116,7 @@ export const MECHS: MechDef[] = [
     blurb: "Lobs slow mortar shells that always detonate. Punishes standing still.",
     unlockCost: 3200,
     color: "#5c5a48",
-    accent: "#c46a2a",
+    accent: "#7ae070",
     stats: { hp: 132, speed: 182, fireRate: 1.6, damage: 30, range: 420 },
     weapon: "mortar",
     skill: {
@@ -133,7 +133,7 @@ export const MECHS: MechDef[] = [
     blurb: "Piercing energy lance and a radiant ward. Holds ground, mends fast.",
     unlockCost: 4000,
     color: "#f0ece0",
-    accent: "#e8c84a",
+    accent: "#5ae0ff",
     stats: { hp: 128, speed: 200, fireRate: 2.8, damage: 24, range: 260 },
     weapon: "lance",
     skill: {

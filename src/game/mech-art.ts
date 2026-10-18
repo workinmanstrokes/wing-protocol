@@ -1,5 +1,6 @@
 /**
- * Shaded-metal player mech art (Lead Sprite Designer, `src/game/art/mechs/*.svg`).
+ * Player mech art for the 8 original mechs: the Lead Sprite Designer's
+ * reference-themed shaded-metal set (`src/game/art/mechs/*.svg`).
  * The SVGs are authored top-down, nose right (+x), in a 96x96 box centred on the
  * mech (1 unit = 1 CSS px). They are inlined as data URLs so they work offline,
  * in the PWA and in the Capacitor build. Each draw rasterises the vector at the
@@ -30,9 +31,9 @@ const SVG: Partial<Record<MechId, string>> = {
 /** Authored box size in art units. */
 export const MECH_ART_BOX = 96;
 /**
- * World scale for the art. At 0.75 the widest parts (Aether's wing binders,
- * Night Scythe's glaive, Jade Serpent's tail, Solar Cross's lance) stay inside
- * about ±35 px, close to the old roughly 64–72 px footprint. Each mech's solid body
+ * World scale for the art. At 0.75 every mech's solid parts (wings, capes,
+ * glaives, lances, rifles) stay inside about ±35 px, close to the old roughly
+ * 64–72 px footprint. Each mech's solid body
  * is about the same size as the unchanged 16 px player hit radius.
  */
 export const MECH_ART_SCALE = 0.75;
