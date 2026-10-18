@@ -150,6 +150,7 @@ const INK = "#14141a";
 const MECH_WEAPON: Record<MechId, WeaponKind> = {
   aether: "beam", forge: "gatling", scythe: "melee", dune: "shotgun",
   serpent: "fang", storm: "arc", vulture: "mortar", cross: "lance",
+  moth: "mote", kiln: "ember", kite: "tether",
 };
 
 export function drawMechTop(ctx: CanvasRenderingContext2D, id: MechId, flash = 0) {
@@ -188,6 +189,8 @@ export function drawMechTopLegacy(ctx: CanvasRenderingContext2D, id: MechId, fla
     case "cross":
       drawCross(ctx);
       break;
+    default:
+      drawMecha(ctx, id, MECH_WEAPON[id]);
   }
   ctx.restore();
 }

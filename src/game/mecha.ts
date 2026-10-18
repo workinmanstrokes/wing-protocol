@@ -105,11 +105,15 @@ export const MECH_PALETTES: Record<MechId, MechaPalette> = {
   storm: { armor: "#f2f4fa", frame: "#1f3f9a", trim: "#f5c518", crest: "#f5c518", eye: "#8fd0ff", glow: "#8fd0ff" },
   vulture: { armor: "#3a1c20", frame: "#191a20", trim: "#c4342e", crest: "#d9d9d9", eye: "#ff6a4a", glow: "#ff8a5c" },
   cross: { armor: "#f4f1e8", frame: "#b88a1e", trim: "#c4302a", crest: "#f5c518", eye: "#9fe8ff", glow: "#fff0c0" },
+  moth: { armor: "#e8dcc0", frame: "#6a5a8a", trim: "#b0742e", crest: "#ffb347", eye: "#7af0e0", glow: "#ffd08a" },
+  kiln: { armor: "#7a4a2e", frame: "#3a2a22", trim: "#c4c0b8", crest: "#ff7a2a", eye: "#ffd04a", glow: "#ff8a3a" },
+  kite: { armor: "#3a6ea8", frame: "#1e2a44", trim: "#ff5a8a", crest: "#f0ece0", eye: "#ff8ab0", glow: "#ff8ab0" },
 };
 
 type Head = "vfin" | "crest" | "horn" | "cross" | "visor";
 const HEADS: Record<MechId, Head> = {
   aether: "vfin", forge: "visor", scythe: "horn", dune: "crest", serpent: "vfin", storm: "vfin", vulture: "horn", cross: "cross",
+  moth: "visor", kiln: "visor", kite: "visor",
 };
 
 function weapon(ctx: CanvasRenderingContext2D, kind: WeaponKind, p: MechaPalette) {
@@ -166,6 +170,10 @@ function weapon(ctx: CanvasRenderingContext2D, kind: WeaponKind, p: MechaPalette
       plate(ctx, [[2, 9], [42, 10], [48, 12], [42, 14], [2, 15]], p.armor, 1.8);
       plate(ctx, [[2, 8], [12, 6], [12, 18], [2, 16]], p.trim, 1.6);
       break;
+    case "mote":
+    case "ember":
+    case "tether":
+      break; // drawn as part of each vault mech's body plan
   }
 }
 
@@ -222,6 +230,9 @@ export const MECH_BOOSTERS: Record<MechId, BoosterSpec> = {
   storm: { ports: [[-20, -24], [-24, -12], [-24, 12], [-20, 24]], color: "#5ae8ff", core: "#ffffff", size: 0.7, pattern: "stagger" },
   vulture: { ports: [[-26, -9], [-26, 9]], color: "#ff4a3a", core: "#ffd0b0", size: 1.15, pattern: "pulse" },
   cross: { ports: [[-30, 0], [-22, -10], [-22, 10], [-14, 0]], color: "#ffd84a", core: "#fffbe0", size: 0.9, pattern: "steady" },
+  moth: { ports: [[-14, -4], [-14, 4]], color: "#ffd08a", core: "#fff6e0", size: 0.8, pattern: "pulse" },
+  kiln: { ports: [[-24, -6], [-24, 6]], color: "#ff6a1a", core: "#ffe0a0", size: 1.3, pattern: "flicker" },
+  kite: { ports: [[-22, 0]], color: "#ff5a8a", core: "#ffe0ec", size: 1.1, pattern: "stagger" },
 };
 
 function torso(ctx: CanvasRenderingContext2D, p: MechaPalette, w: number, h: number) {
@@ -370,6 +381,182 @@ export function drawMecha(ctx: CanvasRenderingContext2D, id: MechId, weaponKind:
       torso(ctx, p, 11, 12);
       ctx.translate(3, 0);
       head(ctx, "cross", p);
+      break;
+    }
+    case "moth": {
+      // Lantern Moth: two pairs of broad rounded dust-wings, feathery antennae, glowing lantern abdomen
+      // teardrop wing: narrow root at the body, broad rounded tip
+      const wing = (rootX: number, len: number, width: number, sweep: number, col: string) => {
+        for (const sg of [-1, 1]) {
+          ctx.save();
+          ctx.translate(rootX, sg * 5);
+          ctx.rotate(sg * sweep);
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.bezierCurveTo(width * 0.9, sg * len * 0.25, width * 0.8, sg * len, 0, sg * len);
+          ctx.bezierCurveTo(-width * 0.8, sg * len, -width * 0.6, sg * len * 0.3, 0, 0);
+          ctx.closePath();
+          ctx.fillStyle = col;
+          ctx.fill();
+          ctx.save();
+          ctx.clip();
+          ctx.fillStyle = shade(col, -0.3);
+          ctx.fillRect(-width, sg > 0 ? len * 0.62 : -len, width * 2, len * 0.38);
+          // vein lines
+          ctx.strokeStyle = shade(col, -0.45);
+          ctx.lineWidth = 0.9;
+          for (const f of [-0.4, 0, 0.4]) {
+            ctx.beginPath();
+            ctx.moveTo(0, sg * 2);
+            ctx.quadraticCurveTo(width * f * 0.6, sg * len * 0.5, width * f, sg * len * 0.92);
+            ctx.stroke();
+          }
+          ctx.restore();
+          ctx.strokeStyle = INK;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          // small eye-spot near the tip
+          lens(ctx, 0, sg * len * 0.7, Math.max(1.6, width * 0.16), p.crest);
+          ctx.restore();
+        }
+      };
+      wing(-10, 20, 13, 0.75, p.frame); // hind wings swept back
+      wing(-2, 26, 16, 0.2, p.armor); // fore wings
+      nozzles(ctx, id);
+      // lantern abdomen (segmented, glowing)
+      ctx.save();
+      ctx.shadowColor = p.crest;
+      ctx.shadowBlur = 10;
+      plate(ctx, [[-26, -5], [-14, -7], [-10, 0], [-14, 7], [-26, 5], [-30, 0]], p.crest, 1.8);
+      ctx.restore();
+      ctx.fillStyle = INK;
+      ctx.fillRect(-22, -6, 1.4, 12);
+      ctx.fillRect(-17, -6.5, 1.4, 13);
+      // thorax
+      plate(ctx, [[-10, -7], [6, -8], [10, 0], [6, 8], [-10, 7]], p.trim, 2);
+      // feathery antennae
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.6;
+      for (const sg of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(10, sg * 3);
+        ctx.quadraticCurveTo(20, sg * 6, 24, sg * 16);
+        ctx.stroke();
+        for (let i = 0; i < 4; i++) {
+          const t = 0.35 + i * 0.18;
+          const x = 10 + (24 - 10) * t;
+          const y = sg * (3 + (16 - 3) * t * t);
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + 3, y - sg * 2);
+          ctx.stroke();
+        }
+      }
+      // round compound-eye head
+      ctx.fillStyle = p.armor;
+      ctx.beginPath();
+      ctx.arc(10, 0, 5.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      lens(ctx, 12, -2.6, 1.6, p.eye);
+      lens(ctx, 12, 2.6, 1.6, p.eye);
+      break;
+    }
+    case "kiln": {
+      // Kiln Tortoise: hex-plated furnace dome on four stub legs, chimney stack, ember grate in front
+      for (const [lx, ly] of [[-14, -18], [8, -18], [-14, 18], [8, 18]] as const) {
+        plate(ctx, [[lx - 5, ly - 4], [lx + 5, ly - 4], [lx + 6, ly + 4], [lx - 6, ly + 4]], p.frame, 1.8);
+      }
+      nozzles(ctx, id);
+      ctx.fillStyle = p.armor;
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.ellipse(-3, 0, 21, 18, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.save();
+      ctx.clip();
+      ctx.fillStyle = shade(p.armor, -0.3);
+      ctx.fillRect(-30, 4, 60, 20);
+      // hex shell plates
+      ctx.strokeStyle = shade(p.armor, -0.55);
+      ctx.lineWidth = 1.4;
+      for (const [hx, hy] of [[-3, 0], [-14, -8], [-14, 8], [8, -8], [8, 8], [-3, -14], [-3, 14]] as const) {
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          const x = hx + Math.cos(a) * 6;
+          const y = hy + Math.sin(a) * 6;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.ellipse(-3, 0, 21, 18, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      // glowing core in the centre plate
+      ctx.save();
+      ctx.shadowColor = p.crest;
+      ctx.shadowBlur = 8;
+      lens(ctx, -3, 0, 3.4, p.crest);
+      ctx.restore();
+      // chimney stack (offset, smoking)
+      plate(ctx, [[-16, -6], [-8, -6], [-8, -1], [-16, -1]], p.trim, 1.6);
+      ctx.fillStyle = INK;
+      ctx.fillRect(-14.5, -5, 5, 3);
+      // ember grate snout
+      plate(ctx, [[16, -7], [26, -5], [28, 0], [26, 5], [16, 7]], p.frame, 2);
+      ctx.fillStyle = p.crest;
+      for (const y of [-3, 0, 3]) ctx.fillRect(20, y - 0.8, 6, 1.6);
+      lens(ctx, 18, -5, 1.3, p.eye);
+      lens(ctx, 18, 5, 1.3, p.eye);
+      break;
+    }
+    case "kite": {
+      // Tether Kite: diamond sail frame with cross spars, long ribbon tail with bows, two tethered blades
+      ctx.strokeStyle = p.trim;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-14, 0);
+      for (let i = 1; i <= 6; i++) ctx.lineTo(-14 - i * 4.5, Math.sin(i * 1.3) * 4);
+      ctx.stroke();
+      for (const i of [2, 4, 6]) {
+        const x = -14 - i * 4.5;
+        const y = Math.sin(i * 1.3) * 4;
+        plate(ctx, [[x, y], [x - 3, y - 4], [x + 3, y - 4]], p.crest, 1);
+        plate(ctx, [[x, y], [x + 3, y + 4], [x - 3, y + 4]], p.crest, 1);
+      }
+      nozzles(ctx, id);
+      // diamond sail, two-tone halves
+      plate(ctx, [[22, 0], [0, -24], [-14, 0]], p.armor, 2.2);
+      plate(ctx, [[22, 0], [-14, 0], [0, 24]], shade(p.armor, -0.25), 2.2);
+      // spars
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(22, 0);
+      ctx.lineTo(-14, 0);
+      ctx.moveTo(0, -24);
+      ctx.lineTo(0, 24);
+      ctx.stroke();
+      // tethered blades at the wingtips
+      for (const sg of [-1, 1]) {
+        ctx.strokeStyle = "rgba(255,255,255,0.6)";
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(0, sg * 24);
+        ctx.lineTo(12, sg * 27);
+        ctx.stroke();
+        plate(ctx, [[10, sg * 25], [20, sg * 26], [14, sg * 30]], p.trim, 1.3);
+      }
+      // pilot pod
+      plate(ctx, [[-2, -5], [8, -5], [12, 0], [8, 5], [-2, 5]], p.frame, 1.8);
+      lens(ctx, 7, 0, 2, p.eye);
       break;
     }
   }

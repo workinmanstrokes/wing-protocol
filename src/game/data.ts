@@ -1,4 +1,7 @@
-import type { GearItem, GearSlot, MechDef, MechId, PerkDef, PerkId, Rarity } from "./types";
+import type { GearItem, MechDef, MechId, PerkDef, PerkId, Rarity } from "./types";
+import { makeItem, pickTemplate } from "./meta/gear";
+
+export { formatMod } from "./meta/gear";
 
 export const MISSION_SECONDS = 300;
 export const WORLD = 3400;
@@ -140,6 +143,64 @@ export const MECHS: MechDef[] = [
     },
     handling: { accel: 7, brake: 8 },
   },
+  // ---- Prism Vault mechs (original designs, premium currency earned in play) ----
+  {
+    id: "moth",
+    name: "Lantern Moth",
+    role: "Controller",
+    premium: true,
+    pilot: { callsign: "Lumen", bio: "Night-shift salvage diver who herds hostiles with light." },
+    blurb: "Broad dust-wings and a glowing lantern core. Drifting light motes seek targets.",
+    unlockCost: 0,
+    color: "#e8dcc0",
+    accent: "#ffb347",
+    stats: { hp: 104, speed: 222, fireRate: 2.6, damage: 13, range: 400 },
+    weapon: "mote",
+    skill: {
+      name: "Lure Lamp",
+      cooldown: 10,
+      desc: "Hangs a lamp ahead that drags nearby hostiles in for 3s, then bursts.",
+    },
+    handling: { accel: 8, brake: 5, weave: 18 },
+  },
+  {
+    id: "kiln",
+    name: "Kiln Tortoise",
+    role: "Juggernaut",
+    premium: true,
+    pilot: { callsign: "Cinder", bio: "Ex-foundry crane operator. Never retreats, only roasts." },
+    blurb: "Domed furnace shell on four stub legs. Sprays embers at close range.",
+    unlockCost: 0,
+    color: "#7a4a2e",
+    accent: "#ff7a2a",
+    stats: { hp: 196, speed: 162, fireRate: 3.2, damage: 9, range: 230 },
+    weapon: "ember",
+    skill: {
+      name: "Molten Shell",
+      cooldown: 12,
+      desc: "Seals the shell: 3.5s invulnerable while scorching everything close.",
+    },
+    handling: { accel: 4, brake: 6 },
+  },
+  {
+    id: "kite",
+    name: "Tether Kite",
+    role: "Skirmisher",
+    premium: true,
+    pilot: { callsign: "Vesper", bio: "Courier racer who flies the storm lanes on a string." },
+    blurb: "Diamond kite frame with ribbon tail. Throws tethered blades that fly back.",
+    unlockCost: 0,
+    color: "#3a6ea8",
+    accent: "#ff5a8a",
+    stats: { hp: 96, speed: 262, fireRate: 2.2, damage: 18, range: 340 },
+    weapon: "tether",
+    skill: {
+      name: "Afterimage",
+      cooldown: 9,
+      desc: "Leaves three decoy images that keep firing for 4s.",
+    },
+    handling: { accel: 16, brake: 10 },
+  },
 ];
 
 export const MECH_MAP: Record<MechId, MechDef> = Object.fromEntries(
@@ -174,27 +235,6 @@ export const PERK_MAP: Record<PerkId, PerkDef> = Object.fromEntries(
   PERKS.map((p) => [p.id, p]),
 ) as Record<PerkId, PerkDef>;
 
-const WEAPON_NAMES: Record<Rarity, string[]> = {
-  common: ["Issue Rifle", "Field Blade", "Stock Scatter", "Wire Coil"],
-  rare: ["Aegis Barrel", "Ion Glaive", "Pulse Rack", "Seeker Pod"],
-  epic: ["Zero Lens", "Phantom Edge", "Siege Rotary", "Dragon Fang"],
-  legendary: ["Buster Core", "Reaper Halo", "Judgment Rack", "Serpent Heart"],
-};
-
-const ARMOR_NAMES: Record<Rarity, string[]> = {
-  common: ["Plate Vest", "Field Skirt", "Ablative Wrap"],
-  rare: ["Reactive Mail", "Wing Binder", "Heat Sink Coat"],
-  epic: ["Gundam Weave", "Phantom Cloak", "Bastion Shell"],
-  legendary: ["Zero Frame", "Titan Hide", "Heir Plate"],
-};
-
-const SYSTEM_NAMES: Record<Rarity, string[]> = {
-  common: ["Scout Optic", "Coolant Tap", "Mag Clamp"],
-  rare: ["Target Uplink", "Nano Drip", "Boost Coil"],
-  epic: ["Predictive Lock", "Phase Shift", "Overvolt Bus"],
-  legendary: ["Oracle Suite", "Ghost Drive", "Core Overflow"],
-};
-
 const RARITY_WEIGHT = [
   { r: "common" as const, w: 54 },
   { r: "rare" as const, w: 28 },
@@ -215,65 +255,11 @@ export function rollRarity(rng: () => number, floor?: Rarity): Rarity {
   return pool[pool.length - 1]!.r;
 }
 
-function pick<T>(rng: () => number, arr: T[]): T {
-  return arr[Math.floor(rng() * arr.length) % arr.length]!;
-}
-
-let gearSeq = 1;
-
+/** In-run loot: a catalog part of the rolled rarity (see meta/gear.ts). */
 export function rollGear(rng: () => number, floor?: Rarity): GearItem {
-  const rarity = rollRarity(rng, floor);
-  const slot: GearSlot = pick(rng, ["weapon", "armor", "system"]);
-  const names =
-    slot === "weapon" ? WEAPON_NAMES : slot === "armor" ? ARMOR_NAMES : SYSTEM_NAMES;
-  const name = pick(rng, names[rarity]);
-  const power =
-    rarity === "common" ? 1 : rarity === "rare" ? 1.7 : rarity === "epic" ? 2.6 : 4;
-  const mods: GearItem["mods"] = {};
-  const rolls = rarity === "legendary" ? 3 : rarity === "epic" ? 2 : 1;
-  const keys: (keyof GearItem["mods"])[] =
-    slot === "weapon"
-      ? ["damage", "fireRate", "crit", "range"]
-      : slot === "armor"
-        ? ["hp", "speed", "magnet"]
-        : ["skillHaste", "magnet", "crit", "fireRate"];
-  for (let i = 0; i < rolls; i++) {
-    const k = pick(rng, keys);
-    const amt =
-      k === "hp"
-        ? Math.round(12 * power + rng() * 8 * power)
-        : k === "damage"
-          ? Math.round((0.1 * power + rng() * 0.08 * power) * 100) / 100
-          : Math.round((0.08 * power + rng() * 0.07 * power) * 100) / 100;
-    mods[k] = (mods[k] ?? 0) + amt;
-  }
-  return {
-    id: `g${Date.now().toString(36)}${gearSeq++}`,
-    name,
-    slot,
-    rarity,
-    mods,
-  };
+  return makeItem(pickTemplate(rollRarity(rng, floor), rng));
 }
 
 export function xpForLevel(level: number): number {
   return Math.round(10 + level * 7 + level * level * 0.35);
 }
-
-export function formatMod(key: string, value: number): string {
-  if (key === "hp") return `Hull +${value}`;
-  if (key === "damage") return `Damage +${Math.round(value * 100)}%`;
-  if (key === "fireRate") return `Fire rate +${Math.round(value * 100)}%`;
-  if (key === "speed") return `Speed +${Math.round(value * 100)}%`;
-  if (key === "magnet") return `Magnet +${Math.round(value * 100)}%`;
-  if (key === "skillHaste") return `Skill haste +${Math.round(value * 100)}%`;
-  if (key === "crit") return `Crit +${Math.round(value * 100)}%`;
-  if (key === "range") return `Range +${Math.round(value * 100)}%`;
-  return `${key} +${value}`;
-}
-
-export const CHESTS = [
-  { id: "supply", name: "Supply Crate", keys: 1, floor: undefined as Rarity | undefined },
-  { id: "command", name: "Command Cache", keys: 2, floor: "rare" as Rarity },
-  { id: "ace", name: "Ace Vault", keys: 3, floor: "epic" as Rarity },
-] as const;
