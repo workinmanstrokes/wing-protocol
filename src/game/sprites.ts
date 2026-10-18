@@ -1,4 +1,5 @@
 import { drawMecha, drawMechaEnemy } from "./mecha";
+import { drawMechArt, hasMechArt } from "./mech-art";
 import type { WeaponKind } from "./types";
 import type { MechId } from "./types";
 
@@ -156,7 +157,9 @@ const MECH_WEAPON: Record<MechId, WeaponKind> = {
 export function drawMechTop(ctx: CanvasRenderingContext2D, id: MechId, flash = 0) {
   ctx.save();
   if (flash > 0) ctx.globalCompositeOperation = "lighter";
-  drawMecha(ctx, id, MECH_WEAPON[id]);
+  // the 8 original mechs use the shaded-metal art; vault mechs are drawn in code
+  if (hasMechArt(id)) drawMechArt(ctx, id);
+  else drawMecha(ctx, id, MECH_WEAPON[id]);
   ctx.restore();
 }
 

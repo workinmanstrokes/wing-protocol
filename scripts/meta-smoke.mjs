@@ -2,7 +2,8 @@
 /**
  * Browser smoke test for the meta menu. Phone viewport. Covers: menu renders
  * fast (no splash), every tab, opening crates, equipping gear, the Prism Vault,
- * and starting each mode (Sortie, Tower incl. a room pick, Elite, Boss Rush).
+ * starting each mode (Sortie, Tower incl. a room pick, Elite, Boss Rush), and the
+ * shaded-metal art rendering for the 8 original mechs.
  *
  *   node scripts/meta-smoke.mjs [url]       (default http://127.0.0.1:8080/)
  *   CHROMIUM_PATH=/path/to/chrome node scripts/meta-smoke.mjs
@@ -221,6 +222,23 @@ await step("elite win pays first-clear cores", async () => {
   await tap('[data-testid="to-menu"]');
   const after = Number((await page.locator('[data-currency="cores"]').innerText()).trim());
   if (after !== before + 20) throw new Error(`cores ${before} -> ${after}`);
+});
+
+await step("metal art renders for the 8 original mechs (roster portraits)", async () => {
+  await tap('[data-tab="pilots"]');
+  await page.waitForTimeout(400);
+  const ids = ["aether", "forge", "scythe", "dune", "serpent", "storm", "vulture", "cross"];
+  const lit = await page.evaluate((ids) => ids.map((id) => {
+    const c = document.querySelector(`[data-mech="${id}"] canvas`);
+    if (!c) return [id, -1];
+    const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 16) if (d[i] + d[i + 1] + d[i + 2] > 180) n++;
+    return [id, n];
+  }), ids);
+  const bad = lit.filter(([, n]) => n < 40);
+  if (bad.length) throw new Error(`blank portraits: ${JSON.stringify(bad)}`);
+  await tap('[data-tab="play"]');
 });
 
 await step("vault mechs: art + each plays and casts its skill", async () => {

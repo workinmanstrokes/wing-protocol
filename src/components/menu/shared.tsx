@@ -2,6 +2,7 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { drawPortrait } from "@/game/sprites";
+import { onMechArtLoad } from "@/game/mech-art";
 import { getSave, getServerSave, subscribeSave } from "@/game/save";
 import { SLOT_LABEL, effectiveMods, formatMod } from "@/game/meta/gear";
 import type { GearItem, MechId, Rarity, Reward } from "@/game/types";
@@ -43,7 +44,11 @@ export function MechPortrait({ id, className }: { id: MechId; className?: string
     draw();
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(draw) : null;
     ro?.observe(c);
-    return () => ro?.disconnect();
+    const off = onMechArtLoad(draw);
+    return () => {
+      ro?.disconnect();
+      off();
+    };
   }, [id]);
   return <canvas ref={ref} className={cn("block w-full bg-elevated", className ?? "h-24")} />;
 }

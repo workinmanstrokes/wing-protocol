@@ -3,6 +3,7 @@ import { GameAudio } from "./audio";
 import { GameInput } from "./input";
 import { drawEnemyTop, drawMechTop, drawObstacle, drawPickup } from "./sprites";
 import { MECH_BOOSTERS } from "./mecha";
+import { mechArtVersion } from "./mech-art";
 import { PACE_EVENTS, paceMultiplier, sectorLayout, type ObstacleKind } from "./levels";
 import type { GearItem, HudState, MechId, PerkId, RunResult } from "./types";
 import type { SaveData } from "./types";
@@ -552,6 +553,8 @@ export class Combat {
         time: this.time, hp: this.hp, kills: this.kills, level: this.level, sector: this.sector,
         mobs: this.mobs.filter((m) => m.alive).length, bosses: this.bosses, evo: [...this.evo],
         uplinks: this.uplinksWon, over: this.over, quality: this.quality, fps: Math.round(this.gov.fps), leveling: this.leveling, paused: this.paused, hitstop: this.hitstop,
+        // player position in CSS px on the canvas (ignores screen shake); used by screenshot tooling
+        screen: { x: this.canvas.clientWidth / 2 + this.px - this.camX, y: this.canvas.clientHeight / 2 + this.py - this.camY },
       }),
       setQuality: (v: QualityPref) => setQualityPref(v),
     };
@@ -2201,8 +2204,8 @@ export class Combat {
       ctx.stroke();
     }
     if (this.invuln > 0) ctx.globalAlpha = 0.55 + Math.sin(this.time * 30) * 0.2;
-    // cached cel-shaded sprite (clip-heavy vector art is too slow to redraw every frame)
-    const mechSpr = cachedSprite(`mech:${this.mechId}`, 104, (c) => drawMechTop(c, this.mechId, 0));
+    // cached sprite (rasterised once at 2x; the key changes when the mech art finishes loading)
+    const mechSpr = cachedSprite(`mech:${this.mechId}:${mechArtVersion()}`, 104, (c) => drawMechTop(c, this.mechId, 0));
     ctx.drawImage(mechSpr.c, -mechSpr.half, -mechSpr.half, mechSpr.half * 2, mechSpr.half * 2);
     ctx.restore();
     ctx.globalAlpha = 1;

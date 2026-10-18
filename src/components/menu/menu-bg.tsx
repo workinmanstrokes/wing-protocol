@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { drawMechTop } from "@/game/sprites";
 import { MECH_BOOSTERS } from "@/game/mecha";
+import { mechArtVersion } from "@/game/mech-art";
 import type { MechId } from "@/game/types";
 
 /**
@@ -94,14 +95,18 @@ export function MenuBackground({ mech }: { mech: MechId }) {
       // hovering mech
       const id = mechRef.current;
       const size = Math.min(w * 0.42, h * 0.24);
-      if (spriteFor !== `${id}:${Math.round(size)}`) {
-        spriteFor = `${id}:${Math.round(size)}`;
-        sprite.width = sprite.height = Math.max(2, Math.round(size * 1.4));
+      // rasterise the hovering mech at device resolution so it stays sharp on retina
+      const sdpr = Math.min(2, window.devicePixelRatio || 1);
+      const key = `${id}:${Math.round(size)}:${sdpr}:${mechArtVersion()}`;
+      if (spriteFor !== key) {
+        spriteFor = key;
+        sprite.width = sprite.height = Math.max(2, Math.round(size * 1.4 * sdpr));
         const sc = sprite.getContext("2d");
         if (sc) {
+          sc.setTransform(1, 0, 0, 1, 0, 0);
           sc.clearRect(0, 0, sprite.width, sprite.height);
           sc.translate(sprite.width / 2, sprite.height / 2);
-          sc.scale(size / 92, size / 92);
+          sc.scale((size / 92) * sdpr, (size / 92) * sdpr);
           sc.rotate(-Math.PI / 2);
           drawMechTop(sc, id);
         }
@@ -127,7 +132,8 @@ export function MenuBackground({ mech }: { mech: MechId }) {
       ctx.beginPath();
       ctx.ellipse(mx, h * 0.2 + size * 0.55, size * 0.32 - bob, size * 0.07, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.drawImage(sprite, mx - sprite.width / 2, my - sprite.height / 2);
+      const sw = sprite.width / sdpr;
+      ctx.drawImage(sprite, mx - sw / 2, my - sw / 2, sw, sw);
 
       // vignette
       const v = ctx.createRadialGradient(cx, h * 0.45, Math.min(w, h) * 0.2, cx, h * 0.45, Math.max(w, h) * 0.75);

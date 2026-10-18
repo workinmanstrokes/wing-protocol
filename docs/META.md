@@ -79,22 +79,17 @@ The odds are always shown on each crate card. Play's loot-box policy requires di
 
 There are 8 existing mechs, unlocked with credits as before, plus **3 new original vault mechs** that come only from the Prism Vault. All art is drawn in code in the game's cel-shaded ink style. None of them copy existing franchises: no V-fins, mono-eyes or franchise silhouettes, and no memes or real people.
 
-### Original lineup redesign
+### Shaded-metal art for the original 8
 
-The 8 credit mechs were redesigned so none of them resembles a mobile-suit franchise. That means no V-fin or antenna crests, no twin-eye faceplate with chin vents, no chest vents, and no white/blue/red/yellow hero colour scheme. Enemies lost the mono-eye rail, chest hoses, spiked shoulder and red horned commander. Ids and stats are unchanged, so saves and hitboxes are unaffected. See `docs/mech-lineup.png`.
+The 8 credit mechs (Aether Wing, Heavy Forge, Night Scythe, Dune Shield, Jade Serpent, Storm Warden, Iron Vulture, Solar Cross) use the Lead Sprite Designer's **shaded-metal** art: bevelled plates, metallic gradients, rivets and a soft drop shadow, with light from the top-left. None of them uses mobile-suit franchise traits.
 
-| Id | Name | Head | Silhouette / colours |
-|---|---|---|---|
-| aether | **Aether Skiff** | Glass cockpit canopy on a teardrop nose | Forward-swept wings with mint tips, hex pauldrons; mint, teal and orange |
-| forge | **Forge Rampart** | Boxy block with a 2×3 spider-eye lens grid | Twin back-mounted ammo drums replace the shoulder missile boxes; steel and lime |
-| scythe | **Night Reaver** | Wedge head with compound eyes and inward-curling mandibles | Beetle elytra shells over thin underwings replace the cloak fins; violet with lime eyes |
-| dune | Dune Shield | Round turret dome with a wraparound visor band and top hatch | Hex side sponsons, tower shield; sand and rust |
-| serpent | **Jade Hammerhead** | Angular hammerhead bar with lenses at the tips | Pectoral fins replace the claw arms; jade, bone and lime |
-| storm | Storm Warden | Round head inside a sensor ring with three nodes | Ringed capacitor orbs replace the floating fin bits; indigo and electric cyan |
-| vulture | Iron Vulture | Hooded raptor head with a hooked bone beak | Folded talon-wings, spine cannon; oxblood and black |
-| cross | Solar Cross | Closed great-helm with a T-slit and a trailing plume | A sun-ring booster frame replaces the X-shaped one, disc pauldrons; ivory, gold and teal |
-
-Enemy grunts now have hex heads with three eyes in a triangle, squared shoulders and ribbed back plates. The Ace is a black-and-gold squad leader with a sensor bar. The Titan has a triple sensor cluster. Renamed skills and text: "Zero Buster" is now **Prism Sweep**, and the "wing-mounted buster" and "dragon fang" blurbs were rewritten.
+- **Source:** `src/game/art/mechs/*.svg`. They are authored top-down, nose right, in a 96-unit box centred on the mech. `src/game/mech-art.ts` inlines them as data URLs, so they work offline, in the PWA and in Capacitor.
+- **Sharpness:** each draw rasterises the vector at the destination size. The combat sprite cache renders it at 2x, and the Hangar/Pilots portraits and the menu background render it at device pixel ratio, so it stays sharp on retina.
+- **Scale and hitbox:** `MECH_ART_SCALE = 0.75`, so the 96-unit box draws at 72 px. The widest parts (Aether's wing binders, Night Scythe's glaive, Jade Serpent's tail, Solar Cross's lance) stay inside about ±35 px, close to the old roughly 64–72 px footprint. The player hit radius is **unchanged at 16 px**, roughly the size of each mech's solid body (equivalent radius 15–21 px at this scale). Wings, tails and glows are purely visual and extend past the hitbox, which favours the player.
+- **Boosters:** `MECH_BOOSTERS` ports sit on each SVG's nozzles at the 0.75 scale.
+- **Vault mechs:** the 3 vault mechs are still drawn in code in the older ink style (thick black outlines, flat two-tone fills). They match the metal mechs in size but not in rendering style.
+- **Enemies:** grunts have hex heads with three eyes in a triangle, squared shoulders and ribbed back plates. The Ace is a black-and-gold squad leader. The Titan has a triple sensor cluster.
+- See `docs/mech-lineup.png`.
 
 | Mech | Pilot | Role | Look | Weapon | Skill |
 |---|---|---|---|---|---|

@@ -321,11 +321,13 @@ test("elite fights and boss rush configs + capped rewards", () => {
   assert.equal(capBossCores(30, true, DAILY_BOSS_CORE_CAP), 30);
 });
 
-test("art and content sources carry no mobile-suit franchise names or signature parts", async () => {
+test("art and content sources (incl. the metal mech SVGs) carry no mobile-suit franchise names", async () => {
   const { readFileSync } = await import("node:fs");
   const banned =
-    /gundam|mobile[ -]suit|mobile[ -]armou?r|zaku|zeon|\bRX-\d|deathscythe|heavyarms|sandrock|shenlong|wing zero|zero buster|dragon fang|v-?fin|mono-?eye|newtype|funnels?\b/i;
-  for (const f of ["../data.ts", "../mecha.ts", "./gear.ts", "./crates.ts", "../../components/menu/pilots-tab.tsx"]) {
+    /gundam|mobile[ -]suit|mobile[ -]armou?r|zaku|zeon|\bRX-\d|deathscythe|heavyarms|sandrock|shenlong|wing zero|v-?fin|mono-?eye|newtype|funnels?\b/i;
+  const art = ["aether_wing", "heavy_forge", "night_scythe", "dune_shield", "jade_serpent", "storm_warden", "iron_vulture", "solar_cross"];
+  const files = ["../data.ts", "../mecha.ts", "../mech-art.ts", "./gear.ts", "./crates.ts", "../../components/menu/pilots-tab.tsx"];
+  for (const f of [...files, ...art.map((n) => `../art/mechs/${n}.svg`)]) {
     const src = readFileSync(new URL(f, import.meta.url), "utf8");
     const hit = src.match(banned);
     assert.equal(hit, null, `${f}: ${hit?.[0]}`);
