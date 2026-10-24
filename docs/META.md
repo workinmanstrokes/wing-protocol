@@ -191,3 +191,19 @@ All modes reuse the existing enemies, elites, sectors and the three bosses (Tita
   - Tower clears floor 1, a room can be picked, floor 2 starts, and the best floor is saved
   - each vault mech deploys and casts its skill
   - no page errors
+
+## Rewarded "extract with 2× loot"
+After a successful sortie extraction, the results screen offers an optional ad: bank the run's credits, keys and salvage a
+second time (the second copy of each part becomes shards like any duplicate). Cores are never doubled. Once per run,
+3 per day (`save.adExtract`, `src/game/meta/extract.ts`). Ads are still the stub countdown (no SDK, no ad IDs); on a web
+portal build the portal's rewarded video is used instead.
+
+## Web portals (Poki / CrazyGames)
+`npm run portal:build` → `dist/portal-{poki,crazygames}/` + `/workspace/out/wing-protocol-{poki,crazygames}.zip`
+(`index.html` at the zip root, relative paths, self-hosted fonts, no PWA/service worker, no third-party requests except the
+portal SDK). `npm run portal:smoke` serves the Poki build from a nested path with a mock SDK and checks the events.
+- `src/game/portal.ts`: `gameLoadingFinished` when the menu mounts; `gameplayStart/Stop` follow live, unpaused combat
+  (level-up picks and the pause menu count as stopped); `commercialBreak` only on **Play again** from the results screen
+  (natural break, the portal decides if an ad plays); rewarded = the opt-in buttons (sponsor crate, 2× extract).
+- Keyboard/mouse (WASD/arrows, mouse aim, Space skill, Esc/P pause) and touch (on-screen pads) both work.
+- Nothing is submitted. Poki requires web exclusivity: choose Poki **or** CrazyGames.

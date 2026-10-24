@@ -153,6 +153,8 @@ export interface SaveData {
   sorties: number;
   freeCrateAt: number;
   adCrates: { day: string; n: number };
+  /** Rewarded 'extract with 2x loot' uses today (see meta/extract.ts). */
+  adExtract: { day: string; n: number };
   premiumPity: number;
   premiumOpened: number;
   towerBest: number;

@@ -592,7 +592,9 @@ export class Combat {
         }
       }
     } else {
-      this.input.sample();
+      // Esc / P again while paused resumes (the step loop that normally reads it is frozen)
+      const act = this.input.sample();
+      if (act.pause && this.paused && !this.leveling && !this.over) this.pause(false);
     }
     this.draw();
     this.raf = requestAnimationFrame(this.frame);
@@ -600,7 +602,8 @@ export class Combat {
 
   private step(dt: number) {
     const act = this.input.sample();
-    if (act.pause) this.paused = !this.paused;
+    // Esc / P: pause and tell React (pushHud) so the pause menu shows and portals get gameplayStop
+    if (act.pause) this.pause(!this.paused);
     if (this.paused) return;
 
     const stats = this.base!;

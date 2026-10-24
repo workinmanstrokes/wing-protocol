@@ -333,3 +333,27 @@ test("art and content sources (incl. the metal mech SVGs) carry no mobile-suit f
     assert.equal(hit, null, `${f}: ${hit?.[0]}`);
   }
 });
+
+/* ------------------------------ 2x extract ad ------------------------------ */
+import { EXTRACT_ADS_PER_DAY, bumpExtract, canDoubleExtract, extractAdsLeft } from "./extract.ts";
+
+test("2x extract: only successful sorties with a haul, 3 per day, resets daily", () => {
+  const base = { survived: true, time: 600, kills: 300, xp: 0, level: 10, credits: 400, keys: 1, loot: [], bosses: 1, mode: "sortie" };
+  assert.equal(canDoubleExtract(base), true);
+  assert.equal(canDoubleExtract({ ...base, survived: false }), false);
+  assert.equal(canDoubleExtract({ ...base, mode: "elite" }), false);
+  assert.equal(canDoubleExtract({ ...base, credits: 0, keys: 0 }), false);
+  let rec = { day: "", n: 0 };
+  assert.equal(extractAdsLeft("2026-10-18", rec), EXTRACT_ADS_PER_DAY);
+  for (let i = 0; i < 5; i++) rec = bumpExtract("2026-10-18", rec);
+  assert.equal(rec.n, EXTRACT_ADS_PER_DAY);
+  assert.equal(extractAdsLeft("2026-10-18", rec), 0);
+  assert.equal(extractAdsLeft("2026-10-19", rec), EXTRACT_ADS_PER_DAY);
+  assert.deepEqual(bumpExtract("2026-10-19", rec), { day: "2026-10-19", n: 1 });
+});
+
+test("save migration adds the adExtract ledger", () => {
+  const s = migrateSave({ version: 2, credits: 5 });
+  assert.deepEqual(s.adExtract, { day: "", n: 0 });
+  assert.deepEqual(defaultSave().adExtract, { day: "", n: 0 });
+});

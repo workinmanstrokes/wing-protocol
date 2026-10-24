@@ -6,6 +6,10 @@ import appCss from "../styles.css?url";
 const APP_NAME = "Wing Protocol";
 // Relative to the deploy base so the manifest/icons also resolve on sub-path hosts (GitHub Pages test builds).
 const BASE = import.meta.env.BASE_URL;
+// Poki / CrazyGames build (`npm run portal:build` sets VITE_PORTAL=1): no PWA manifest / service worker helper,
+// no third-party requests (self-hosted fonts from portal/fonts), no og:image.
+const PORTAL = import.meta.env.VITE_PORTAL === "1";
+const GOOGLE_FONTS = "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Rajdhani:wght@500;600;700&display=swap";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -29,22 +33,23 @@ export const Route = createRootRoute({
         property: "og:description",
         content: "Survive timed mech sorties against endless machine hordes. Unlock frames, open crates, and extract legendary gear.",
       },
-      { property: "og:image", content: "https://wp2-pi.vercel.app/og.jpg" },
+      ...(PORTAL ? [] : [{ property: "og:image", content: "https://wp2-pi.vercel.app/og.jpg" }]),
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: `${BASE}favicon.svg` },
       { rel: "stylesheet", href: appCss },
-      { rel: "manifest", href: `${BASE}manifest.webmanifest` },
-      { rel: "apple-touch-icon", sizes: "180x180", href: `${BASE}icon-180.png` },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Rajdhani:wght@500;600;700&display=swap",
-      },
+      ...(PORTAL
+        ? [{ rel: "stylesheet", href: `${BASE}fonts/fonts.css` }]
+        : [
+            { rel: "manifest", href: `${BASE}manifest.webmanifest` },
+            { rel: "apple-touch-icon", sizes: "180x180", href: `${BASE}icon-180.png` },
+            { rel: "preconnect", href: "https://fonts.googleapis.com" },
+            { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" as const },
+            { rel: "stylesheet", href: GOOGLE_FONTS },
+          ]),
     ],
     // iOS/PWA helper (offline service worker, WebAudio unlock on first tap, no zoom/rubber-band). Production only.
-    scripts: import.meta.env.PROD ? [{ src: `${BASE}ios.js` }] : [],
+    scripts: import.meta.env.PROD && !PORTAL ? [{ src: `${BASE}ios.js` }] : [],
   }),
   component: () => (
     <html lang="en" suppressHydrationWarning>
