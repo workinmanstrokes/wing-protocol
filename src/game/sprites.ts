@@ -1,4 +1,5 @@
 import { drawMecha, drawMechaEnemy } from "./mecha";
+import { drawMechArt, hasMechArt } from "./mech-art";
 import type { WeaponKind } from "./types";
 import type { MechId } from "./types";
 
@@ -150,12 +151,15 @@ const INK = "#14141a";
 const MECH_WEAPON: Record<MechId, WeaponKind> = {
   aether: "beam", forge: "gatling", scythe: "melee", dune: "shotgun",
   serpent: "fang", storm: "arc", vulture: "mortar", cross: "lance",
+  moth: "mote", kiln: "ember", kite: "tether",
 };
 
 export function drawMechTop(ctx: CanvasRenderingContext2D, id: MechId, flash = 0) {
   ctx.save();
   if (flash > 0) ctx.globalCompositeOperation = "lighter";
-  drawMecha(ctx, id, MECH_WEAPON[id]);
+  // the 8 original mechs use the shaded-metal art; vault mechs are drawn in code
+  if (hasMechArt(id)) drawMechArt(ctx, id);
+  else drawMecha(ctx, id, MECH_WEAPON[id]);
   ctx.restore();
 }
 
@@ -188,6 +192,8 @@ export function drawMechTopLegacy(ctx: CanvasRenderingContext2D, id: MechId, fla
     case "cross":
       drawCross(ctx);
       break;
+    default:
+      drawMecha(ctx, id, MECH_WEAPON[id]);
   }
   ctx.restore();
 }

@@ -1,11 +1,14 @@
-import { MISSION_SECONDS, MECH_MAP, PERKS, PERK_MAP, WORLD, xpForLevel, rollGear } from "./data";
+import { MECH_MAP, PERKS, PERK_MAP, WORLD, xpForLevel, rollGear } from "./data";
 import { GameAudio } from "./audio";
 import { GameInput } from "./input";
 import { drawEnemyTop, drawMechTop, drawObstacle, drawPickup } from "./sprites";
 import { MECH_BOOSTERS } from "./mecha";
+import { mechArtVersion } from "./mech-art";
 import { PACE_EVENTS, paceMultiplier, sectorLayout, type ObstacleKind } from "./levels";
 import type { GearItem, HudState, MechId, PerkId, RunResult } from "./types";
 import type { SaveData } from "./types";
+import { SLOTS, applyGear } from "./meta/gear";
+import { BASE_CONFIG, type BossKind, type RunConfig } from "./meta/modes";
 
 import {
   BloomLayer, FpsGovernor, PROFILES, cachedSprite, drawSprite, floorTile, getQualityPref, glowSprite,
@@ -43,6 +46,8 @@ type Bullet = {
   color: string;
   crit: boolean;
   chain: number;
+  /** Tether blades: seconds of life left at which the shot turns back to the mech. */
+  ret: number;
 };
 
 type Mob = {
@@ -230,7 +235,7 @@ export class Combat {
   private wrecks: Wreck[] = [];
   private bullets = pool(MAX_BULLET, () => ({
     alive: false, x: 0, y: 0, vx: 0, vy: 0, r: 4, dmg: 1, life: 1, pierce: 0,
-    friendly: true, homing: 0, explode: 0, color: "#9fd", crit: false, chain: 0,
+    friendly: true, homing: 0, explode: 0, color: "#9fd", crit: false, chain: 0, ret: 0,
   }));
   private mobs = pool(MAX_ENEMY, () => ({
     alive: false, kind: "drone", x: 0, y: 0, vx: 0, vy: 0, r: 14, hp: 1, maxHp: 1,
@@ -294,6 +299,14 @@ export class Combat {
   private uplinksWon = 0;
   private bossIdx = 0;
   private evo = new Set<string>();
+  private cfg: RunConfig = BASE_CONFIG;
+  private bossKills = 0;
+  private bossQueue = 0;
+  private bossWait = 0;
+  private lure = { t: 0, x: 0, y: 0 };
+  private moltenT = 0;
+  private moltenTick = 0;
+  private decoys: { x: number; y: number; t: number; cd: number }[] = [];
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -301,7 +314,11 @@ export class Combat {
     audio: GameAudio,
     save: SaveData,
     hooks: CombatHooks,
+    cfg: RunConfig = BASE_CONFIG,
   ) {
+    this.cfg = cfg;
+    this.sector = cfg.sector;
+    this.bossWait = cfg.bossDelay;
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
     this.input = input;
@@ -309,7 +326,7 @@ export class Combat {
     this.hooks = hooks;
     this.mechId = save.selected;
     const inv = save.inventory;
-    this.gear = (["weapon", "armor", "system"] as const)
+    this.gear = SLOTS
       .map((s) => inv.find((g) => g.id === save.equipped[s]))
       .filter((g): g is GearItem => !!g);
     this.reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
@@ -326,7 +343,7 @@ export class Combat {
     document.addEventListener("visibilitychange", this.onVisibility);
     this.base = this.computeBase();
     this.maxHp = this.base.hp;
-    this.hp = this.maxHp;
+    this.hp = Math.max(1, this.maxHp * Math.min(1, cfg.startHpFrac));
     this.skillMax = MECH_MAP[this.mechId].skill.cooldown / this.base.skillHaste;
     this.skillCd = 0;
     this.seedWrecks();
@@ -342,24 +359,12 @@ export class Combat {
 
   private computeBase() {
     const m = MECH_MAP[this.mechId];
-    let hp = m.stats.hp;
-    let speed = m.stats.speed;
-    let fire = m.stats.fireRate;
-    let dmg = m.stats.damage;
-    let range = m.stats.range;
-    let magnet = 88;
-    let skillHaste = 1;
-    let crit = 0.06;
-    for (const g of this.gear) {
-      hp += g.mods.hp ?? 0;
-      speed *= 1 + (g.mods.speed ?? 0);
-      fire *= 1 + (g.mods.fireRate ?? 0);
-      dmg *= 1 + (g.mods.damage ?? 0);
-      range *= 1 + (g.mods.range ?? 0);
-      magnet *= 1 + (g.mods.magnet ?? 0);
-      skillHaste *= 1 + (g.mods.skillHaste ?? 0);
-      crit += g.mods.crit ?? 0;
-    }
+    // gear (and mode buffs, applied like one more part) — same math the Hangar shows
+    const geared = applyGear(
+      { hp: m.stats.hp, speed: m.stats.speed, fire: m.stats.fireRate, dmg: m.stats.damage, range: m.stats.range, magnet: 88, skillHaste: 1, crit: 0.06 },
+      [...this.gear, { mods: this.cfg.playerMods, level: 1 }],
+    );
+    let { hp, speed, fire, dmg, range, magnet, skillHaste, crit } = geared;
     const pk = this.perks;
     fire *= 1 + 0.18 * (pk.overclock ?? 0);
     dmg *= 1 + 0.22 * (pk.apcore ?? 0);
@@ -398,6 +403,66 @@ export class Combat {
           this.spawnMob(false, "swarm", { x: this.px + Math.cos(a) * 560, y: this.py + Math.sin(a) * 560 });
         }
       }
+    }
+  }
+
+  /** 0..1 difficulty ramp for this run (sorties: elapsed / 300s). */
+  private progress(): number {
+    const i0 = this.cfg.intensity0;
+    return Math.min(1, i0 + (this.time / this.cfg.duration) * (1 - i0) * (this.cfg.scripted ? 1 : 0.7));
+  }
+
+  /** Vault-mech skill effects that persist over time. */
+  private updateSkills(dt: number) {
+    const stats = this.base!;
+    if (this.lure.t > 0) {
+      this.lure.t -= dt;
+      for (const m of this.mobs) {
+        if (!m.alive || m.boss) continue;
+        const dx = this.lure.x - m.x;
+        const dy = this.lure.y - m.y;
+        const d = Math.hypot(dx, dy);
+        if (d < 320 && d > 6) {
+          m.x += (dx / d) * 150 * dt;
+          m.y += (dy / d) * 150 * dt;
+        }
+      }
+      if (this.lure.t <= 0) {
+        this.hurtCircle(this.lure.x, this.lure.y, 150, stats.dmg * 5, true);
+        this.spawnRing(this.lure.x, this.lure.y, 150, 0.45, "#ffb347", 5);
+        this.explodeFx(this.lure.x, this.lure.y, 110, "#ffb347");
+        this.audio.slam();
+      }
+    }
+    if (this.moltenT > 0) {
+      this.moltenT -= dt;
+      this.moltenTick -= dt;
+      if (this.moltenTick <= 0) {
+        this.moltenTick = 0.25;
+        this.hurtCircle(this.px, this.py, 100, stats.dmg * 1.1, false);
+        this.spawnRing(this.px, this.py, 100, 0.25, "#ff7a2a", 3);
+      }
+    }
+    for (const d of this.decoys) {
+      if (d.t <= 0) continue;
+      d.t -= dt;
+      d.cd -= dt;
+      if (d.cd > 0) continue;
+      d.cd = 0.32;
+      let best: Mob | null = null;
+      let bd = 380 * 380;
+      for (const m of this.mobs) {
+        if (!m.alive) continue;
+        const q = (m.x - d.x) ** 2 + (m.y - d.y) ** 2;
+        if (q < bd) { bd = q; best = m; }
+      }
+      if (!best) continue;
+      const a = Math.atan2(best.y - d.y, best.x - d.x);
+      const b = this.bullets.find((x) => !x.alive);
+      if (!b) continue;
+      b.alive = true; b.x = d.x; b.y = d.y; b.vx = Math.cos(a) * 640; b.vy = Math.sin(a) * 640;
+      b.r = 4; b.dmg = stats.dmg * 0.5; b.life = 0.6; b.pierce = 0; b.friendly = true; b.homing = 0;
+      b.explode = 0; b.color = "#ff8ab0"; b.crit = false; b.chain = 0; b.ret = 0;
     }
   }
 
@@ -488,6 +553,8 @@ export class Combat {
         time: this.time, hp: this.hp, kills: this.kills, level: this.level, sector: this.sector,
         mobs: this.mobs.filter((m) => m.alive).length, bosses: this.bosses, evo: [...this.evo],
         uplinks: this.uplinksWon, over: this.over, quality: this.quality, fps: Math.round(this.gov.fps), leveling: this.leveling, paused: this.paused, hitstop: this.hitstop,
+        // player position in CSS px on the canvas (ignores screen shake); used by screenshot tooling
+        screen: { x: this.canvas.clientWidth / 2 + this.px - this.camX, y: this.canvas.clientHeight / 2 + this.py - this.camY },
       }),
       setQuality: (v: QualityPref) => setQualityPref(v),
     };
@@ -497,6 +564,7 @@ export class Combat {
       spawn: (n: number) => { for (let i = 0; i < n; i++) this.spawnMob(false); },
       skipTo: (t: number) => { this.time = t; },
       god: (v: boolean) => { this.godMode = v; },
+      killBosses: () => { for (const m of this.mobs) if (m.alive && m.boss) this.killMob(m, 0, 0); },
     });
   }
   private godMode = false;
@@ -633,23 +701,36 @@ export class Combat {
     }
 
     this.spawnAcc += dt;
-    const intensity = Math.min(1, this.time / MISSION_SECONDS);
+    const intensity = this.progress();
     let bossAlive = false;
     for (const q of this.mobs) if (q.alive && q.boss) { bossAlive = true; break; }
-    const pace = paceMultiplier(this.time, { bossAlive, uplinkActive: this.uplink.active });
-    const interval = Math.max(0.12, 0.85 - intensity * 0.68) / pace;
-    this.runPaceEvents();
+    const pace = this.cfg.scripted
+      ? paceMultiplier(this.time, { bossAlive, uplinkActive: this.uplink.active })
+      : bossAlive ? 0.7 : 1;
+    const interval = Math.max(0.12, 0.85 - intensity * 0.68) / (pace * this.cfg.spawnRate);
+    if (this.cfg.scripted) this.runPaceEvents();
+    this.updateSkills(dt);
     if (this.surgeT > 0) this.surgeT -= dt;
     while (this.spawnAcc >= interval) {
       this.spawnAcc -= interval;
       const n = 1 + (intensity > 0.4 ? 1 : 0) + (intensity > 0.75 ? 1 : 0);
       for (let i = 0; i < n; i++) this.spawnMob(false);
     }
-    if (this.bossIdx < BOSS_TIMES.length && this.time >= BOSS_TIMES[this.bossIdx]!) {
-      this.bossIdx += 1;
-      this.spawnMob(true);
+    if (this.cfg.scripted) {
+      if (this.bossIdx < BOSS_TIMES.length && this.time >= BOSS_TIMES[this.bossIdx]!) {
+        this.bossIdx += 1;
+        this.spawnMob(true);
+      }
+    } else if (this.bossQueue < this.cfg.bosses.length && !bossAlive) {
+      // boss modes: next boss a few seconds after the previous one falls
+      this.bossWait -= dt;
+      if (this.bossWait <= 0) {
+        this.spawnMob(true, this.cfg.bosses[this.bossQueue]);
+        this.bossQueue += 1;
+        this.bossWait = this.cfg.bossDelay + 1.5;
+      }
     }
-    const sec = Math.min(2, Math.floor(this.time / SECTOR_LEN));
+    const sec = this.cfg.scripted ? Math.min(2, Math.floor(this.time / SECTOR_LEN)) : this.sector;
     if (sec !== this.sector) {
       this.sector = sec;
       this.announce(SECTORS[sec]!.name, 2.8);
@@ -658,7 +739,7 @@ export class Combat {
       this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.1);
     }
     this.updateHazards(dt);
-    this.updateUplink(dt);
+    if (this.cfg.scripted) this.updateUplink(dt);
 
     this.updateMobs(dt, aimX, aimY);
     void this.nextBossAt;
@@ -676,7 +757,9 @@ export class Combat {
     }
     this.audio.tickMusic(dt, intensity);
 
-    if (this.hp <= 0 || this.time >= MISSION_SECONDS) this.finish(this.hp > 0);
+    if (this.hp <= 0) this.finish(false);
+    else if (this.cfg.endWhenBossesDown && this.bossQueue >= this.cfg.bosses.length && this.bossKills >= this.cfg.bosses.length) this.finish(true);
+    else if (this.time >= this.cfg.duration) this.finish(!this.cfg.endWhenBossesDown);
   }
 
   private resolvePlayerWrecks() {
@@ -692,6 +775,8 @@ export class Combat {
       }
     }
   }
+
+  private lastBullet: Bullet | null = null;
 
   private nearestMob(): Mob | null {
     let best: Mob | null = null;
@@ -737,9 +822,13 @@ export class Combat {
       arc: "#8fd0ff",
       mortar: "#c9a25a",
       lance: "#fff0c0",
+      mote: "#ffd08a",
+      ember: "#ff8a3a",
+      tether: "#ff8ab0",
     };
     const fireOne = (ang: number, speed: number, r: number, life: number, extra = 0, forceExplode = 0) => {
       const b = this.bullets.find((x) => !x.alive);
+      this.lastBullet = b ?? null;
       if (!b) return;
       b.alive = true;
       b.x = this.px + Math.cos(ang) * 22;
@@ -753,7 +842,8 @@ export class Combat {
       b.pierce = pierce + (mech.weapon === "lance" ? 3 : 0) + (this.evo.has("railstorm") ? 2 : 0);
       if (this.evo.has("railstorm")) b.dmg *= 1.25;
       b.friendly = true;
-      b.homing = mech.weapon === "fang" ? 2.4 : 0;
+      b.homing = mech.weapon === "fang" ? 2.4 : mech.weapon === "mote" ? 3.4 : 0;
+      b.ret = 0;
       b.explode =
         forceExplode + ((this.perks.explosive ?? 0) > 0 ? 18 + 10 * (this.perks.explosive ?? 0) : 0);
       b.color = colors[mech.weapon] ?? "#9fd";
@@ -794,6 +884,32 @@ export class Combat {
       for (let i = 0; i < forks; i++) {
         const o = (i - (forks - 1) / 2) * 0.08 + (Math.random() - 0.5) * 0.05;
         fireOne(baseAng + o, 300, 6, 0.9, 0, 34);
+      }
+    } else if (mech.weapon === "mote") {
+      // slow drifting light motes that curl onto targets
+      const n = 2 + forks;
+      for (let i = 0; i < n; i++) {
+        const o = (i - (n - 1) / 2) * 0.35 * spreadN;
+        fireOne(baseAng + o, 340, 5, stats.range / 300);
+      }
+    } else if (mech.weapon === "ember") {
+      // short furnace spray; embers pop in tiny bursts
+      const pellets = 6 + forks;
+      for (let i = 0; i < pellets; i++) {
+        const o = (Math.random() - 0.5) * 0.9 * spreadN;
+        fireOne(baseAng + o, 420 + Math.random() * 120, 4.5, stats.range / 480, 0, 14);
+      }
+    } else if (mech.weapon === "tether") {
+      // tethered blades fly out, then snap back to the frame (hitting on both legs)
+      for (let i = 0; i < forks; i++) {
+        const o = (i - (forks - 1) / 2) * 0.22;
+        const life = (stats.range / 560) * 2;
+        fireOne(baseAng + o, 560, 7, life);
+        const b = this.lastBullet;
+        if (b) {
+          b.ret = life / 2;
+          b.pierce = 4 + pierce;
+        }
       }
     } else if (mech.weapon === "lance") {
       for (let i = 0; i < forks; i++) {
@@ -957,6 +1073,25 @@ export class Combat {
         b.chain = 0;
       }
       this.spawnRing(this.px, this.py, 40, 0.24, "#c9a25a", 3);
+    } else if (id === "moth") {
+      this.lure = { t: 3, x: Math.max(40, Math.min(WORLD - 40, this.px + ax * 170)), y: Math.max(40, Math.min(WORLD - 40, this.py + ay * 170)) };
+      this.spawnRing(this.lure.x, this.lure.y, 320, 0.5, "#ffb347", 3);
+    } else if (id === "kiln") {
+      this.moltenT = 3.5;
+      this.moltenTick = 0;
+      this.invuln = 3.5;
+      this.spawnRing(this.px, this.py, 110, 0.4, "#ff7a2a", 5);
+      this.screenFlash("#ff7a2a", 0.2);
+    } else if (id === "kite") {
+      const base = Math.atan2(ay, ax);
+      this.decoys = [-1, 0, 1].map((i) => ({
+        x: Math.max(40, Math.min(WORLD - 40, this.px + Math.cos(base + Math.PI + i * 1.1) * 70)),
+        y: Math.max(40, Math.min(WORLD - 40, this.py + Math.sin(base + Math.PI + i * 1.1) * 70)),
+        t: 4,
+        cd: i * 0.1 + 0.1,
+      }));
+      this.invuln = Math.max(this.invuln, 0.3);
+      for (const d of this.decoys) this.spawnRing(d.x, d.y, 30, 0.3, "#ff8ab0", 3);
     } else if (id === "cross") {
       this.shield = 3.2;
       this.invuln = 0.3;
@@ -975,7 +1110,7 @@ export class Combat {
     m.y = at ? at.y : this.py + Math.sin(ang) * dist;
     m.x = Math.max(30, Math.min(WORLD - 30, m.x));
     m.y = Math.max(30, Math.min(WORLD - 30, m.y));
-    const t = this.time / MISSION_SECONDS;
+    const t = this.progress();
     const scale = 1 + t * 1.9;
     m.elite = "";
     m.phase = 0;
@@ -983,10 +1118,10 @@ export class Combat {
     m.shieldMax = 0;
     m.boss = boss;
     if (boss) {
-      const kind = (["titan", "ace", "warden"] as const)[Math.min(2, this.bosses)]!;
+      const kind: BossKind = (kindOverride as BossKind | undefined) ?? (["titan", "ace", "warden"] as const)[Math.min(2, this.bosses)]!;
       m.kind = kind;
       m.r = kind === "warden" ? 40 : kind === "ace" ? 28 : 36;
-      m.hp = (kind === "warden" ? 1500 : kind === "ace" ? 620 : 600) * scale;
+      m.hp = (kind === "warden" ? 1500 : kind === "ace" ? 620 : 600) * scale * this.cfg.bossHp;
       m.speed = kind === "ace" ? 150 : kind === "warden" ? 52 : 88;
       m.dmg = kind === "warden" ? 24 : kind === "ace" ? 22 : 26;
       m.xp = kind === "warden" ? 90 : 48;
@@ -1029,6 +1164,11 @@ export class Combat {
         if (m.elite === "swift") m.speed *= 1.6;
       }
     }
+    m.hp *= this.cfg.enemyHp;
+    m.dmg *= this.cfg.enemyDmg;
+    m.speed *= this.cfg.enemySpeed;
+    m.shieldMax *= this.cfg.enemyHp;
+    m.shieldHp = m.shieldMax;
     m.maxHp = m.hp;
     m.alive = true;
     m.vx = 0;
@@ -1341,12 +1481,22 @@ export class Combat {
         b.vx += (dx / d) * b.homing * 90 * dt;
         b.vy += (dy / d) * b.homing * 90 * dt;
       }
+      if (b.ret > 0 && b.life < b.ret) {
+        const dx = this.px - b.x;
+        const dy = this.py - b.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const sp = Math.max(420, Math.hypot(b.vx, b.vy));
+        b.vx = (dx / d) * sp;
+        b.vy = (dy / d) * sp;
+        if (d < 24) b.life = 0;
+      }
       b.x += b.vx * dt;
       b.y += b.vy * dt;
       b.life -= dt;
       if (b.life <= 0) {
         if (b.friendly && b.explode > 0) this.hurtCircle(b.x, b.y, b.explode, b.dmg * 0.6, false);
         b.alive = false;
+          b.ret = 0;
         continue;
       }
       if (b.friendly) {
@@ -1368,12 +1518,14 @@ export class Combat {
                 b.vy = (ddy / dd) * spd;
               } else {
                 b.alive = false;
+          b.ret = 0;
               }
               break;
             }
             b.pierce -= 1;
             if (b.pierce < 0) {
               b.alive = false;
+          b.ret = 0;
               break;
             }
           }
@@ -1384,6 +1536,7 @@ export class Combat {
         if (dx * dx + dy * dy < (16 + b.r) * (16 + b.r)) {
           this.damagePlayer(b.dmg);
           b.alive = false;
+          b.ret = 0;
         }
       }
     }
@@ -1448,6 +1601,7 @@ export class Combat {
       if (m.elite === "splitter") for (let i = 0; i < 4; i++) this.spawnMob(false, "swarm", { x: m.x + (i - 1.5) * 16, y: m.y });
     }
     if (m.boss) {
+      this.bossKills += 1;
       this.trauma = Math.min(1, this.trauma + 0.55);
       this.hitstop = 0.07;
       this.spawnRing(m.x, m.y, 100, 0.65, "#ff8a5c", 4);
@@ -1462,6 +1616,11 @@ export class Combat {
     } else {
       this.spawnRing(m.x, m.y, m.elite ? 50 : 28, 0.32, m.elite ? "#ffd166" : "#d8d0c4", 2);
       this.explodeFx(m.x, m.y, m.r * 2.2, m.elite ? "#ffd166" : "#ff9a5c");
+    }
+    // boss modes: the last boss falling wins at once (before any level-up prompt)
+    if (m.boss && this.cfg.endWhenBossesDown && this.bossQueue >= this.cfg.bosses.length && this.bossKills >= this.cfg.bosses.length) {
+      this.finish(true);
+      return;
     }
     this.checkLevel();
   }
@@ -1735,14 +1894,14 @@ export class Combat {
   private finish(survived: boolean) {
     if (this.over) return;
     this.over = true;
-    const credits =
+    const credits = Math.round(this.cfg.rewardMult * (
       50 +
       this.kills * 2 +
       this.bosses * 90 +
       this.uplinksWon * 60 +
       this.creditsGot +
-      (survived ? 220 : Math.floor(this.time * 0.4));
-    const keys = this.keysGot + this.bosses + (survived ? 1 : 0);
+      (survived ? (this.cfg.scripted ? 220 : 60) : Math.floor(this.time * 0.4))));
+    const keys = this.cfg.scripted ? this.keysGot + this.bosses + (survived ? 1 : 0) : this.keysGot;
     const result: RunResult = {
       survived,
       time: this.time,
@@ -1756,6 +1915,9 @@ export class Combat {
       sector: this.sector + 1,
       uplinks: this.uplinksWon,
       evolutions: EVOLUTIONS.filter((e) => this.evo.has(e.id)).map((e) => e.name),
+      mode: this.cfg.mode,
+      bossKills: this.bossKills,
+      hpFrac: Math.max(0, this.hp / this.maxHp),
     };
     this.hooks.onOver(result);
     this.pushHud();
@@ -1768,7 +1930,7 @@ export class Combat {
       xp: this.xp,
       xpNext: xpForLevel(this.level),
       level: this.level,
-      timeLeft: Math.max(0, MISSION_SECONDS - this.time),
+      timeLeft: Math.max(0, this.cfg.duration - this.time),
       kills: this.kills,
       skillCd: this.skillCd,
       skillMax: this.skillMax,
@@ -2042,10 +2204,39 @@ export class Combat {
       ctx.stroke();
     }
     if (this.invuln > 0) ctx.globalAlpha = 0.55 + Math.sin(this.time * 30) * 0.2;
-    // cached cel-shaded sprite (clip-heavy vector art is too slow to redraw every frame)
-    const mechSpr = cachedSprite(`mech:${this.mechId}`, 104, (c) => drawMechTop(c, this.mechId, 0));
+    // cached sprite (rasterised once at 2x; the key changes when the mech art finishes loading)
+    const mechSpr = cachedSprite(`mech:${this.mechId}:${mechArtVersion()}`, 104, (c) => drawMechTop(c, this.mechId, 0));
     ctx.drawImage(mechSpr.c, -mechSpr.half, -mechSpr.half, mechSpr.half * 2, mechSpr.half * 2);
     ctx.restore();
+    ctx.globalAlpha = 1;
+    if (this.lure.t > 0) {
+      const g = glowSprite("#ffb347", true);
+      const pr = 18 + Math.sin(this.time * 12) * 4;
+      ctx.drawImage(g.c, this.lure.x - pr, this.lure.y - pr, pr * 2, pr * 2);
+      ctx.strokeStyle = "rgba(255,179,71,0.35)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(this.lure.x, this.lure.y, 320 * (this.lure.t / 3), 0, Math.PI * 2);
+      ctx.stroke();
+      if (bl) bl.light(this.lure.x, this.lure.y, 90, "#ffb347", 0.8);
+    }
+    if (this.moltenT > 0) {
+      ctx.strokeStyle = `rgba(255,122,42,${0.45 + 0.3 * Math.sin(this.time * 20)})`;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(this.px, this.py, 34, 0, Math.PI * 2);
+      ctx.stroke();
+      if (bl) bl.light(this.px, this.py, 120, "#ff7a2a", 0.7);
+    }
+    for (const d of this.decoys) {
+      if (d.t <= 0) continue;
+      ctx.save();
+      ctx.globalAlpha = 0.35 + 0.15 * Math.sin(this.time * 16);
+      ctx.translate(d.x, d.y);
+      ctx.rotate(this.aim);
+      ctx.drawImage(mechSpr.c, -mechSpr.half, -mechSpr.half, mechSpr.half * 2, mechSpr.half * 2);
+      ctx.restore();
+    }
     ctx.globalAlpha = 1;
     if (this.coils > 0) {
       for (let i = 0; i < 3; i++) {
