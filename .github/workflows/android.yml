@@ -1,0 +1,78 @@
+name: Android build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [android-wrapper]
+  pull_request:
+    paths:
+      - "android/**"
+      - "src/**"
+      - "capacitor.config.ts"
+      - "package*.json"
+      - ".github/workflows/android.yml"
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install
+        run: npm ci
+
+      - name: Build web (static SPA) and sync Capacitor
+        run: |
+          BUILD_TARGET=capacitor npx vite build
+          npx cap sync android
+
+      - name: Debug APK
+        working-directory: android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+        run: ./gradlew --no-daemon assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WingProtocol-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Decode keystore
+        if: env.HAS_KEYSTORE == 'true'
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Release AAB (signed)
+        if: env.HAS_KEYSTORE == 'true'
+        working-directory: android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon bundleRelease
+
+      - uses: actions/upload-artifact@v4
+        if: env.HAS_KEYSTORE == 'true'
+        with:
+          name: WingProtocol-release-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
