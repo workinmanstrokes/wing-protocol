@@ -155,7 +155,7 @@ export function StoreTab() {
             {VAULT_MECHS.map((id) => (
               <div key={id} className={cn("overflow-hidden rounded-lg border", save.unlocked.includes(id) ? "border-legend/60" : "border-border")}>
                 <MechPortrait id={id} className="h-16" />
-                <p className="truncate px-1.5 py-1 text-[10px] font-semibold">{MECH_MAP[id].name}</p>
+                <p className="truncate px-1.5 py-1 text-[11px] font-semibold">{MECH_MAP[id].name}</p>
               </div>
             ))}
           </div>
@@ -224,7 +224,7 @@ export function StoreTab() {
 
 function OddsList({ odds }: { odds: CrateDef["odds"] }) {
   return (
-    <ul className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px]" aria-label="Drop odds">
+    <ul className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px]" aria-label="Drop odds">
       {oddsRows(odds).map((r) => (
         <li key={r.rarity}>
           <span className={cn("capitalize", rarityClass(r.rarity))}>{r.rarity}</span> {r.pct}%

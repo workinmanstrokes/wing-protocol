@@ -99,7 +99,7 @@ export function PlayTab({ onStart }: { onStart: (s: StartSpec) => void }) {
                     )}
                   >
                     <p className="font-display text-sm font-semibold leading-tight">{b.name}</p>
-                    <p className="text-[10px] text-muted">
+                    <p className="text-[11px] text-muted">
                       {save.eliteClears[b.id] ? `Cleared ×${save.eliteClears[b.id]}` : `+${ELITE_FIRST_CLEAR_CORES} cores`}
                     </p>
                   </button>

@@ -95,8 +95,8 @@ export function GearCard({
       )}
     >
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[10px] uppercase tracking-wider text-muted">{SLOT_LABEL[item.slot]}</p>
-        <p className="font-mono text-[10px] text-muted">Lv {item.level}</p>
+        <p className="text-[11px] uppercase tracking-wider text-muted">{SLOT_LABEL[item.slot]}</p>
+        <p className="font-mono text-[11px] text-muted">Lv {item.level}</p>
       </div>
       <p className="font-display text-base font-semibold leading-tight">{item.name}</p>
       <p className={cn("mb-1 text-[11px] capitalize", rarityClass(item.rarity))}>{item.rarity}</p>

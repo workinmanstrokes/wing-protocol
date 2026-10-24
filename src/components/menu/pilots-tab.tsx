@@ -22,7 +22,7 @@ export function PilotsTab({ onVault }: { onVault: () => void }) {
               <div className="flex items-center gap-2">
                 <Eyebrow>{m.role}</Eyebrow>
                 {m.premium && (
-                  <span className="flex items-center gap-1 rounded bg-legend/20 px-1.5 text-[10px] font-semibold uppercase text-legend">
+                  <span className="flex items-center gap-1 rounded bg-legend/20 px-1.5 text-[11px] font-semibold uppercase text-legend">
                     <Sparkles className="size-3" /> Vault
                   </span>
                 )}
@@ -48,7 +48,7 @@ export function PilotsTab({ onVault }: { onVault: () => void }) {
                   ] as const
                 ).map(([k, v]) => (
                   <div key={k}>
-                    <dt className="text-[10px] uppercase tracking-wider text-muted">{k}</dt>
+                    <dt className="text-[11px] uppercase tracking-wider text-muted">{k}</dt>
                     <dd className="font-display text-base font-semibold tabular-nums">{v}</dd>
                   </div>
                 ))}
@@ -108,7 +108,7 @@ export function PilotsTab({ onVault }: { onVault: () => void }) {
                   <MechPortrait id={x.id} className="h-20" />
                   <div className="px-2 py-1.5">
                     <p className="truncate font-display text-sm font-semibold leading-tight">{x.name}</p>
-                    <p className="text-[10px] uppercase tracking-wider text-muted">
+                    <p className="text-[11px] uppercase tracking-wider text-muted">
                       {locked ? (x.premium ? "Vault" : `${x.unlockCost} cr`) : save.selected === x.id ? "Active" : x.role}
                     </p>
                   </div>

@@ -79,14 +79,14 @@ export function HangarTab() {
                     slot === s ? "border-accent bg-elevated" : "border-border bg-surface/90",
                   )}
                 >
-                  <p className="text-[9px] uppercase tracking-wider text-muted">{SLOT_LABEL[s]}</p>
+                  <p className="text-[11px] uppercase tracking-wider text-muted">{SLOT_LABEL[s]}</p>
                   {it ? (
                     <>
                       <p className="truncate font-display text-xs font-semibold leading-tight">{it.name}</p>
-                      <p className={cn("text-[9px] capitalize", rarityClass(it.rarity))}>Lv {it.level}</p>
+                      <p className={cn("text-[11px] capitalize", rarityClass(it.rarity))}>Lv {it.level}</p>
                     </>
                   ) : (
-                    <p className="text-[10px] text-subtle">Empty</p>
+                    <p className="text-[11px] text-subtle">Empty</p>
                   )}
                 </button>
               );
@@ -98,7 +98,7 @@ export function HangarTab() {
           <section aria-label="Selected part" className="rounded-xl border border-border bg-surface/95 p-3" data-testid="gear-detail">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted">{SLOT_LABEL[item.slot]}</p>
+                <p className="text-[11px] uppercase tracking-wider text-muted">{SLOT_LABEL[item.slot]}</p>
                 <h3 className="font-display text-xl font-semibold leading-tight">{item.name}</h3>
                 <p className={cn("text-xs capitalize", rarityClass(item.rarity))}>
                   {item.rarity} · Lv {item.level}/{MAX_LEVEL[item.rarity]}
@@ -128,7 +128,7 @@ export function HangarTab() {
                 {cost ? (
                   <>
                     Upgrade
-                    <span className="block text-[10px] font-normal text-muted">
+                    <span className="block text-[11px] font-normal text-muted">
                       {cost.credits} cr · {cost.shards} shards
                     </span>
                   </>
@@ -159,7 +159,7 @@ export function HangarTab() {
                   onClick={() => setSel(g.id)}
                   footer={
                     save.equipped[g.slot] === g.id ? (
-                      <p className="mt-1 text-[10px] uppercase tracking-wider text-accent">Equipped</p>
+                      <p className="mt-1 text-[11px] uppercase tracking-wider text-accent">Equipped</p>
                     ) : null
                   }
                 />
@@ -176,11 +176,11 @@ function StatDelta({ label, a, b, digits = 0, suffix = "" }: { label: string; a:
   const up = b - a > 0.0001;
   return (
     <div>
-      <dt className="text-[10px] uppercase tracking-wider text-muted">{label}</dt>
+      <dt className="text-[11px] uppercase tracking-wider text-muted">{label}</dt>
       <dd className="font-display text-sm font-semibold tabular-nums">
         {b.toFixed(digits)}
         {suffix}
-        {up && <span className="ml-1 text-[10px] text-ok">+{(b - a).toFixed(digits)}</span>}
+        {up && <span className="ml-1 text-[11px] text-ok">+{(b - a).toFixed(digits)}</span>}
       </dd>
     </div>
   );
