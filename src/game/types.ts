@@ -94,6 +94,9 @@ export interface RunResult {
   keys: number;
   loot: GearItem[];
   bosses: number;
+  sector?: number;
+  uplinks?: number;
+  evolutions?: string[];
 }
 
 export interface HudState {
