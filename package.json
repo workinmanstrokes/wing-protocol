@@ -26,7 +26,8 @@
     "build:pwa": "BUILD_TARGET=capacitor vite build --base ${PWA_BASE:-/} && node scripts/gen-sw.mjs dist/client wingprotocol",
     "test:smoke": "node scripts/meta-smoke.mjs",
     "portal:build": "BUILD_TARGET=capacitor VITE_PORTAL=1 vite build --base ./ && node scripts/build-portal.mjs all --zip /workspace/out",
-    "portal:smoke": "node scripts/portal-smoke.mjs"
+    "portal:smoke": "node scripts/portal-smoke.mjs",
+    "portal:crazygames": "BUILD_TARGET=capacitor VITE_PORTAL=1 vite build --base ./ && node scripts/build-portal.mjs crazygames --zip /workspace/out/crazygames/wing-protocol"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

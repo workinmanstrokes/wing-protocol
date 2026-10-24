@@ -120,7 +120,7 @@ export async function portalGameplay(on: boolean) {
   await initPortal();
   call(on ? "gameplayStart" : "gameplayStop");
 }
-/** Natural-break ad slot; the portal decides whether an ad plays. Resolves when the game may continue. */
+/** Natural-break ad slot (Poki only; CrazyGames gets no midgame ads). Resolves when the game may continue. */
 export async function portalCommercialBreak(): Promise<void> {
   if (!portalId || busy) return;
   await initPortal();
@@ -129,7 +129,7 @@ export async function portalCommercialBreak(): Promise<void> {
   if (playing) await portalGameplay(false);
   try {
     if (sdk && portalId === "poki") await sdk.commercialBreak();
-    else if (sdk) await new Promise<void>((res) => sdk.ad.requestAd("midgame", { adFinished: res, adError: res }));
+    // CrazyGames: rewarded ads only, never midgame/interstitial ads.
   } catch {
     /* no ad */
   }
