@@ -1,3 +1,5 @@
+import { drawMecha, drawMechaEnemy } from "./mecha";
+import type { WeaponKind } from "./types";
 import type { MechId } from "./types";
 
 function roundRect(
@@ -145,7 +147,20 @@ function energyStroke(
 
 const INK = "#14141a";
 
+const MECH_WEAPON: Record<MechId, WeaponKind> = {
+  aether: "beam", forge: "gatling", scythe: "melee", dune: "shotgun",
+  serpent: "fang", storm: "arc", vulture: "mortar", cross: "lance",
+};
+
 export function drawMechTop(ctx: CanvasRenderingContext2D, id: MechId, flash = 0) {
+  ctx.save();
+  if (flash > 0) ctx.globalCompositeOperation = "lighter";
+  drawMecha(ctx, id, MECH_WEAPON[id]);
+  ctx.restore();
+}
+
+/** Previous vector designs, kept for reference/rollback. */
+export function drawMechTopLegacy(ctx: CanvasRenderingContext2D, id: MechId, flash = 0) {
   ctx.save();
   if (flash > 0) ctx.globalCompositeOperation = "lighter";
   switch (id) {
@@ -453,6 +468,12 @@ function drawCross(ctx: CanvasRenderingContext2D) {
 }
 
 export function drawEnemyTop(ctx: CanvasRenderingContext2D, id: string, flash = 0) {
+  if (flash <= 0) {
+    ctx.save();
+    const ok = drawMechaEnemy(ctx, id);
+    ctx.restore();
+    if (ok) return;
+  }
   ctx.save();
   switch (id) {
     case "drone":
@@ -571,8 +592,9 @@ export function drawPortrait(ctx: CanvasRenderingContext2D, id: MechId, w: numbe
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
   ctx.save();
-  ctx.translate(w * 0.5, h * 0.58);
-  const k = Math.min(w, h * 1.2) / 90;
+  ctx.translate(w * 0.5, h * 0.52);
+  // mecha sprites span roughly ±40px incl. weapons/wings; fit with a margin
+  const k = Math.min(w, h) / 92;
   ctx.scale(k, k);
   ctx.rotate(-0.5);
   drawMechTop(ctx, id);
