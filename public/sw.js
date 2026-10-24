@@ -1,0 +1,17 @@
+/* Offline service worker (runtime version; static builds overwrite it with a full precache via scripts/gen-sw.mjs).
+   Cache name carries a content hash, so every build gets a fresh cache and old ones are removed.
+   Same-origin requests: network first (updates arrive right away), cached copy when offline. */
+const CACHE = 'wingprotocol-runtime-v1';
+const FILES = ["./", "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png", "ios.js"];
+self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => Promise.all(FILES.map((f) => c.add(new Request(f, { cache: 'reload' })).catch(() => {})))).then(() => self.skipWaiting())));
+self.addEventListener('activate', (e) => e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE && !k.endsWith('-runtime')).map((k) => caches.delete(k)))).then(() => self.clients.claim())));
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  e.respondWith(fetch(req).then((res) => {
+    if (res && res.ok && res.type === 'basic') { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {}); }
+    return res;
+  }).catch(() => caches.match(req, { ignoreSearch: true }).then((hit) => hit || (req.mode === 'navigate' ? caches.match('./index.html').then((r) => r || caches.match('./')) : Response.error()))));
+});

@@ -143,6 +143,10 @@ function authPopupPlugin(): Plugin {
 // `0.0.0.0:8080` is the live-preview contract — don't change host/port.
 // The dev server starts once `src/router.tsx` and `src/routes/` exist — see
 // AGENTS.md § "First scaffold".
+// BUILD_TARGET=capacitor: static SPA (dist/client/index.html) for the Android
+// wrapper. No Nitro/Vercel server — the game runs fully client-side.
+const CAPACITOR = process.env.BUILD_TARGET === "capacitor";
+
 export default defineConfig(({ command, isPreview }) => ({
   server: {
     host: "0.0.0.0",
@@ -162,11 +166,18 @@ export default defineConfig(({ command, isPreview }) => ({
     // Dev-only /__app-env, read by scripts/check-auth-invariant.mjs.
     appEnvPlugin(),
     tailwindcss(),
-    tanstackStart(),
-    ...(command === "build" || isPreview
+    tanstackStart(
+      CAPACITOR
+        ? { spa: { enabled: true, prerender: { outputPath: "/index.html", crawlLinks: false } } }
+        : undefined,
+    ),
+    ...(!CAPACITOR && (command === "build" || isPreview)
       ? [
           nitro({
             preset: "vercel",
+            // Vercel disabled Node 20 for new deployments on 2026-10-01; pin the
+            // function runtime so a local Node 20/22 build can't emit nodejs20.x.
+            vercel: { functions: { runtime: "nodejs24.x" } },
             // Auto-registers anything under server/middleware/*.
             serverDir: "./server",
           }),

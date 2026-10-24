@@ -1,3 +1,6 @@
+import { drawMecha, drawMechaEnemy } from "./mecha";
+import { drawMechArt, hasMechArt } from "./mech-art";
+import type { WeaponKind } from "./types";
 import type { MechId } from "./types";
 
 function roundRect(
@@ -145,7 +148,23 @@ function energyStroke(
 
 const INK = "#14141a";
 
+const MECH_WEAPON: Record<MechId, WeaponKind> = {
+  aether: "beam", forge: "gatling", scythe: "melee", dune: "shotgun",
+  serpent: "fang", storm: "arc", vulture: "mortar", cross: "lance",
+  moth: "mote", kiln: "ember", kite: "tether",
+};
+
 export function drawMechTop(ctx: CanvasRenderingContext2D, id: MechId, flash = 0) {
+  ctx.save();
+  if (flash > 0) ctx.globalCompositeOperation = "lighter";
+  // the 8 original mechs use the shaded-metal art; vault mechs are drawn in code
+  if (hasMechArt(id)) drawMechArt(ctx, id);
+  else drawMecha(ctx, id, MECH_WEAPON[id]);
+  ctx.restore();
+}
+
+/** Previous vector designs, kept for reference/rollback. */
+export function drawMechTopLegacy(ctx: CanvasRenderingContext2D, id: MechId, flash = 0) {
   ctx.save();
   if (flash > 0) ctx.globalCompositeOperation = "lighter";
   switch (id) {
@@ -173,6 +192,8 @@ export function drawMechTop(ctx: CanvasRenderingContext2D, id: MechId, flash = 0
     case "cross":
       drawCross(ctx);
       break;
+    default:
+      drawMecha(ctx, id, MECH_WEAPON[id]);
   }
   ctx.restore();
 }
@@ -453,6 +474,12 @@ function drawCross(ctx: CanvasRenderingContext2D) {
 }
 
 export function drawEnemyTop(ctx: CanvasRenderingContext2D, id: string, flash = 0) {
+  if (flash <= 0) {
+    ctx.save();
+    const ok = drawMechaEnemy(ctx, id);
+    ctx.restore();
+    if (ok) return;
+  }
   ctx.save();
   switch (id) {
     case "drone":
@@ -514,13 +541,51 @@ export function drawEnemyTop(ctx: CanvasRenderingContext2D, id: string, flash = 
       plateGrad(ctx, -6, -6, 18, 12, "#3a2024", "#180d0f", "#c4453a", 2);
       glowDot(ctx, 4, 0, 2.4, "#ffb0a8", "#e04030");
       break;
+    case "swarm":
+      poly(ctx, [[-6, -5], [8, 0], [-6, 5], [-3, 0]], "#5a3a4a", "#d070a0");
+      glowDot(ctx, 2, 0, 1.4, "#ffc0e0", "#d070a0");
+      break;
+    case "charger":
+      poly(ctx, [[-12, -11], [16, -4], [20, 0], [16, 4], [-12, 11], [-8, 0]], "#4a3420", "#e8a040");
+      plateGrad(ctx, -6, -5, 14, 10, "#6a4a28", "#2a1c10", INK, 2);
+      glowDot(ctx, 14, 0, 2, "#ffe0a0", "#e8a040");
+      break;
+    case "sniper":
+      plateGrad(ctx, -10, -9, 16, 18, "#3a3048", "#1a1424", INK, 3);
+      ctx.strokeStyle = "#a890c8";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(4, 0);
+      ctx.lineTo(24, 0);
+      ctx.stroke();
+      glowDot(ctx, 24, 0, 1.6, "#ffd0e0", "#ff4a6a");
+      break;
+    case "shielder":
+      plateGrad(ctx, -14, -12, 24, 24, "#3a4a58", "#1a2430", INK, 4);
+      plateGrad(ctx, 10, -14, 6, 28, "#5a7a90", "#2a3a48", "#8fd0ff", 2);
+      glowDot(ctx, 0, 0, 2.4, "#d0f0ff", "#4a90c0");
+      break;
+    case "warden":
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        ctx.save();
+        ctx.rotate(a);
+        plateGrad(ctx, 18, -5, 12, 10, "#5a2a20", "#2a1210", "#ff7a4a", 2);
+        ctx.restore();
+      }
+      plateGrad(ctx, -20, -20, 40, 40, "#3a1c18", "#140a08", "#ff5a4a", 8);
+      glowDot(ctx, 0, 0, 6, "#ffd0a0", "#ff5a4a");
+      break;
     default:
       plate(ctx, -8, -8, 16, 16, "#666", INK, 2);
   }
   if (flash > 0) {
-    ctx.globalAlpha = Math.min(0.7, flash);
+    ctx.globalAlpha = Math.min(0.75, flash * 4);
+    ctx.globalCompositeOperation = "lighter";
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(-24, -24, 48, 48);
+    ctx.beginPath();
+    ctx.arc(0, 0, 20, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.restore();
 }
@@ -533,8 +598,10 @@ export function drawPortrait(ctx: CanvasRenderingContext2D, id: MechId, w: numbe
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
   ctx.save();
-  ctx.translate(w * 0.5, h * 0.58);
-  ctx.scale(w / 90, w / 90);
+  ctx.translate(w * 0.5, h * 0.52);
+  // mecha sprites span roughly ±40px incl. weapons/wings; fit with a margin
+  const k = Math.min(w, h) / 92;
+  ctx.scale(k, k);
   ctx.rotate(-0.5);
   drawMechTop(ctx, id);
   ctx.restore();
@@ -611,4 +678,39 @@ export function drawWreck(ctx: CanvasRenderingContext2D, seed: number) {
   plateGrad(ctx, -4, -16, 12, 10, "#544c40", "#201f1a", "#0e0e0d", 2);
   glowDot(ctx, -8, 3, 1.4, "#ff9a5c", "#7a3018");
   ctx.restore();
+}
+
+/** Sector obstacles: wreck (Outer Yard), ion pylon (Ion Storm), reactor barrier (Reactor Core). */
+export function drawObstacle(ctx: CanvasRenderingContext2D, kind: string, seed: number) {
+  if (kind === "pylon") {
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.beginPath();
+    ctx.arc(2, 3, 18, 0, Math.PI * 2);
+    ctx.fill();
+    plateGrad(ctx, -14, -14, 28, 28, "#3a4660", "#1a2030", "#0a0d14", 6);
+    plateGrad(ctx, -8, -8, 16, 16, "#5a6a8a", "#2a3448", "#0a0d14", 4);
+    glowDot(ctx, 0, 0, 3.2, "#bfe6ff", "#3a7ad0");
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + seed * 0.3;
+      glowDot(ctx, Math.cos(a) * 11, Math.sin(a) * 11, 1.2, "#8fd0ff", "#2a5a90");
+    }
+    ctx.restore();
+    return;
+  }
+  if (kind === "barrier") {
+    ctx.save();
+    ctx.rotate(seed * 0.5);
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.fillRect(-22, -18, 48, 40);
+    plateGrad(ctx, -24, -20, 46, 38, "#5a3a2e", "#2a1814", "#0e0807", 5);
+    ctx.fillStyle = "#e8b04a";
+    for (let i = 0; i < 4; i++) ctx.fillRect(-20 + i * 11, -18, 5, 4);
+    ctx.fillStyle = "#1a0e0a";
+    for (let i = 0; i < 4; i++) ctx.fillRect(-15 + i * 11, -18, 5, 4);
+    glowDot(ctx, 0, 2, 2.4, "#ffb070", "#a03a18");
+    ctx.restore();
+    return;
+  }
+  drawWreck(ctx, seed * 0.7);
 }

@@ -10,6 +10,7 @@ export default tseslint.config(
   {
     ignores: [
       "dist/**",
+      "android/**",
       ".output/**",
       ".vercel/**",
       ".nitro/**",
@@ -44,4 +45,15 @@ export default tseslint.config(
   },
   // Disable rules that conflict with Prettier formatting.
   prettier,
+  {
+    // Hand-written ES5 browser shim (iOS PWA) and the service-worker template
+    // (__FILES__ / __CACHE__ are substituted by scripts/gen-sw.mjs at build time).
+    files: ["public/ios.js", "scripts/sw.tpl.js"],
+    languageOptions: { globals: { __FILES__: "readonly" } },
+    rules: {
+      "no-empty": ["error", { allowEmptyCatch: true }],
+      "@typescript-eslint/no-unused-expressions": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+    },
+  },
 );
