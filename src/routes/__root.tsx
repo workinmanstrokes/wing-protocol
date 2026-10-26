@@ -35,6 +35,7 @@ export const Route = createRootRoute({
       },
       ...(PORTAL ? [] : [{ property: "og:image", content: "https://wp2-pi.vercel.app/og.jpg" }]),
     ],
+    scripts: [{ src: "/telemetry.js", defer: true }],
     links: [
       { rel: "icon", type: "image/svg+xml", href: `${BASE}favicon.svg` },
       { rel: "stylesheet", href: appCss },
