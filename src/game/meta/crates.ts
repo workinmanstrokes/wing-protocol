@@ -43,7 +43,8 @@ export const VAULT_MECHS: readonly MechId[] = ["moth", "kiln", "kite"];
 
 /**
  * Real-money Core packs. The purchase path is stubbed and SWITCHED OFF: no
- * billing SDK is wired. Turning it on needs a Play Console product + billing.
+ * billing SDK is wired, and the Store hides the section while this is false.
+ * Turning it on needs a Play Console product + billing.
  */
 export const CORE_PURCHASES_ENABLED = false;
 export const CORE_PACKS = [

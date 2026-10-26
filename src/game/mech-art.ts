@@ -1,5 +1,5 @@
 /**
- * Player mech art for the 8 original mechs: the Lead Sprite Designer's
+ * Player mech art for all 11 mechs (8 originals + 3 Prism Vault): the Lead Sprite Designer's
  * reference-themed shaded-metal set (`src/game/art/mechs/*.svg`).
  * The SVGs are authored top-down, nose right (+x), in a 96x96 box centred on the
  * mech (1 unit = 1 CSS px). They are inlined as data URLs so they work offline,
@@ -16,6 +16,9 @@ import serpentSvg from "./art/mechs/jade_serpent.svg?raw";
 import stormSvg from "./art/mechs/storm_warden.svg?raw";
 import vultureSvg from "./art/mechs/iron_vulture.svg?raw";
 import crossSvg from "./art/mechs/solar_cross.svg?raw";
+import mothSvg from "./art/mechs/lantern_moth.svg?raw";
+import kilnSvg from "./art/mechs/kiln_tortoise.svg?raw";
+import kiteSvg from "./art/mechs/tether_kite.svg?raw";
 
 const SVG: Partial<Record<MechId, string>> = {
   aether: aetherSvg,
@@ -26,6 +29,10 @@ const SVG: Partial<Record<MechId, string>> = {
   storm: stormSvg,
   vulture: vultureSvg,
   cross: crossSvg,
+  // Prism Vault mechs, same shaded-metal pass
+  moth: mothSvg,
+  kiln: kilnSvg,
+  kite: kiteSvg,
 };
 
 /** Authored box size in art units. */
