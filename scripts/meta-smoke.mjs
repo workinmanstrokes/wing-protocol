@@ -106,11 +106,8 @@ await step("store: odds shown, open free crate and a supply crate", async () => 
   await tap('[data-testid="reveal-ok"]');
 });
 
-await step("store: rewarded-ad crate (stub)", async () => {
-  await tap('[data-testid="open-ad"]');
-  await expectVisible('[aria-label="Sponsor ad"]');
-  await expectVisible('[data-testid="reveal"]', 6000);
-  await tap('[data-testid="reveal-ok"]');
+await step("store: sponsor crate is app-only on plain web (no fake ad)", async () => {
+  if (!(await page.locator('[data-testid="open-ad"]').first().isDisabled())) throw new Error("sponsor crate should be disabled on plain web");
 });
 
 await step("hangar: equip a part and stats update", async () => {
