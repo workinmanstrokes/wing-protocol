@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Gem, Gift, KeyRound, Lock, PlayCircle, Sparkles, Wallet } from "lucide-react";
+import { Gem, Gift, KeyRound, PlayCircle, Sparkles, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MECH_MAP } from "@/game/data";
 import { canOpenCrate, openCrate, openPrismVault, type CratePay } from "@/game/save";
 import {
   CORE_PACKS,
+  purchaseCores,
   CORE_PURCHASES_ENABLED,
   CRATES,
   VAULT_ALL_OWNED_SHARDS,
@@ -155,7 +156,7 @@ export function StoreTab() {
             {VAULT_MECHS.map((id) => (
               <div key={id} className={cn("overflow-hidden rounded-lg border", save.unlocked.includes(id) ? "border-legend/60" : "border-border")}>
                 <MechPortrait id={id} className="h-16" />
-                <p className="truncate px-1.5 py-1 text-[10px] font-semibold">{MECH_MAP[id].name}</p>
+                <p className="truncate px-1.5 py-1 text-[11px] font-semibold">{MECH_MAP[id].name}</p>
               </div>
             ))}
           </div>
@@ -191,23 +192,19 @@ export function StoreTab() {
           </button>
         </section>
 
-        {/* real-money stub, switched off */}
-        <section aria-label="Core packs" className="rounded-xl border border-border bg-surface/70 p-3">
-          <div className="flex items-center gap-2">
-            <Lock className="size-4 text-muted" />
+        {/* real-money packs: hidden entirely until CORE_PURCHASES_ENABLED (off for launch) */}
+        {CORE_PURCHASES_ENABLED && (
+          <section aria-label="Core packs" className="rounded-xl border border-border bg-surface/70 p-3">
             <h3 className="font-display text-base font-semibold">Core packs</h3>
-          </div>
-          <p className="mt-0.5 text-[11px] text-muted">
-            {CORE_PURCHASES_ENABLED ? "" : "Not available in this build. Everything is earnable by playing."}
-          </p>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {CORE_PACKS.map((p) => (
-              <button key={p.id} type="button" disabled className="min-h-11 rounded-lg border border-border text-xs text-muted opacity-50">
-                {p.label} · {p.cores}
-              </button>
-            ))}
-          </div>
-        </section>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {CORE_PACKS.map((p) => (
+                <button key={p.id} type="button" onClick={() => purchaseCores(p.id)} className="min-h-11 rounded-lg border border-border bg-elevated text-xs font-semibold">
+                  {p.label} · {p.cores}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
 
       {adPlaying && (
@@ -224,7 +221,7 @@ export function StoreTab() {
 
 function OddsList({ odds }: { odds: CrateDef["odds"] }) {
   return (
-    <ul className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px]" aria-label="Drop odds">
+    <ul className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px]" aria-label="Drop odds">
       {oddsRows(odds).map((r) => (
         <li key={r.rarity}>
           <span className={cn("capitalize", rarityClass(r.rarity))}>{r.rarity}</span> {r.pct}%

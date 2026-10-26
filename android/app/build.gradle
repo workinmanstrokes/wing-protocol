@@ -1,5 +1,13 @@
 apply plugin: 'com.android.application'
 
+// Release signing comes from android/keystore.properties (written by the
+// release-aab workflow from repo secrets). No file => unsigned release; debug unaffected.
+def keystorePropsFile = rootProject.file('keystore.properties')
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
 android {
     namespace = "com.diddlerrr.wingprotocol"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -22,19 +30,19 @@ android {
     }
     signingConfigs {
         release {
-            // Populated from CI secrets; missing secrets => unsigned release (debug builds unaffected).
-            def ks = System.getenv("ANDROID_KEYSTORE_PATH")
-            if (ks && new File(ks).exists()) {
-                storeFile file(ks)
-                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                keyAlias System.getenv("ANDROID_KEY_ALIAS")
-                keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+            if (keystorePropsFile.exists()) {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
             }
         }
     }
     buildTypes {
         release {
-            if (System.getenv("ANDROID_KEYSTORE_PATH")) signingConfig signingConfigs.release
+            if (keystorePropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

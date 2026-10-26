@@ -1,0 +1,73 @@
+name: Build signed release AAB
+
+# Manual only. Builds the static SPA, syncs Capacitor and produces a signed
+# Play Store bundle from repository secrets. Core packs stay hidden
+# (CORE_PURCHASES_ENABLED = false); nothing here touches ads.
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "versionName (e.g. 1.0.0)"
+        required: true
+        default: "1.0.0"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Check secrets
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KSP: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KA: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KP: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for v in KS KSP KA KP; do [ -n "${!v}" ] || { echo "Missing secret ($v)"; exit 1; }; done
+      - name: Install, build web, sync Android
+        run: |
+          npm ci
+          BUILD_TARGET=capacitor npx vite build
+          npx cap sync android
+      - name: Keystore
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KSP: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KA: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KP: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          echo "$KS" | base64 -d > android/app/upload.jks
+          printf 'storeFile=upload.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$KSP" "$KA" "$KP" > android/keystore.properties
+      - name: bundleRelease
+        working-directory: android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: ${{ inputs.version_name }}
+        run: |
+          chmod +x gradlew
+          ./gradlew bundleRelease --no-daemon --stacktrace
+      - name: Verify signed
+        run: jarsigner -verify android/app/build/outputs/bundle/release/app-release.aab | grep -q "jar verified"
+      - name: Rename AAB
+        run: cp android/app/build/outputs/bundle/release/app-release.aab WingProtocol-release.aab
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WingProtocol-release-aab
+          path: WingProtocol-release.aab
+          if-no-files-found: error
+      - name: Clean up keystore
+        if: always()
+        run: rm -f android/app/upload.jks android/keystore.properties

@@ -402,7 +402,7 @@ function HudOverlay({
             {mm}:{ss}
           </p>
           <p className="mt-1 text-[11px] uppercase tracking-wider text-muted">{bossMode ? "time limit" : "until extract"}</p>
-          <p className="mt-0.5 text-[10px] uppercase tracking-wider text-subtle">{label}</p>
+          <p className="mt-0.5 text-[11px] uppercase tracking-wider text-subtle">{label}</p>
         </div>
       </div>
       <div className="pointer-events-auto absolute right-3 top-3 flex gap-2 sm:right-4">
@@ -426,7 +426,7 @@ function HudOverlay({
       <div className="absolute bottom-6 right-24 hidden sm:block">
         <div
           className={cn(
-            "grid size-16 place-items-center rounded-full border px-2 text-center font-display text-[10px] font-semibold uppercase tracking-wider",
+            "grid size-16 place-items-center rounded-full border px-2 text-center font-display text-[11px] font-semibold uppercase tracking-wider",
             skillReady ? "border-accent text-fg" : "border-border text-muted",
           )}
         >
@@ -490,7 +490,7 @@ function TouchPad({ input }: { input: GameInput }) {
       </div>
       <button
         type="button"
-        className="absolute bottom-6 right-5 grid size-16 place-items-center rounded-full border border-border bg-surface/80 font-display text-[10px] font-semibold uppercase tracking-wider sm:hidden"
+        className="absolute bottom-6 right-5 grid size-16 place-items-center rounded-full border border-border bg-surface/80 font-display text-[11px] font-semibold uppercase tracking-wider sm:hidden"
         onPointerDown={(e) => {
           e.preventDefault();
           input.skillTap = true;

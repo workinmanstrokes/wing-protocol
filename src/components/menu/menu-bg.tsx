@@ -94,7 +94,7 @@ export function MenuBackground({ mech }: { mech: MechId }) {
 
       // hovering mech
       const id = mechRef.current;
-      const size = Math.min(w * 0.42, h * 0.24);
+      const size = Math.min(w * 0.62, h * 0.3);
       // rasterise the hovering mech at device resolution so it stays sharp on retina
       const sdpr = Math.min(2, window.devicePixelRatio || 1);
       const key = `${id}:${Math.round(size)}:${sdpr}:${mechArtVersion()}`;
@@ -121,7 +121,7 @@ export function MenuBackground({ mech }: { mech: MechId }) {
       bg.addColorStop(0, boost.core);
       bg.addColorStop(0.25, boost.color);
       bg.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.globalAlpha = 0.45 * flick;
+      ctx.globalAlpha = 0.6 * flick;
       ctx.globalCompositeOperation = "lighter";
       ctx.fillStyle = bg;
       ctx.fillRect(mx - size, my - size * 0.2, size * 2, size * 1.2);
@@ -133,12 +133,18 @@ export function MenuBackground({ mech }: { mech: MechId }) {
       ctx.ellipse(mx, h * 0.2 + size * 0.55, size * 0.32 - bob, size * 0.07, 0, 0, Math.PI * 2);
       ctx.fill();
       const sw = sprite.width / sdpr;
+      // rim light so the hero ship reads bright against the dark hangar
+      ctx.save();
+      ctx.shadowColor = "rgba(197,215,235,0.55)";
+      ctx.shadowBlur = size * 0.18;
+      ctx.filter = "brightness(1.18) contrast(1.06)";
       ctx.drawImage(sprite, mx - sw / 2, my - sw / 2, sw, sw);
+      ctx.restore();
 
       // vignette
       const v = ctx.createRadialGradient(cx, h * 0.45, Math.min(w, h) * 0.2, cx, h * 0.45, Math.max(w, h) * 0.75);
       v.addColorStop(0, "rgba(0,0,0,0)");
-      v.addColorStop(1, "rgba(0,0,0,0.7)");
+      v.addColorStop(1, "rgba(0,0,0,0.55)");
       ctx.fillStyle = v;
       ctx.fillRect(0, 0, w, h);
 

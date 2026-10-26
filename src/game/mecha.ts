@@ -113,7 +113,7 @@ export interface BoosterSpec {
   size: number; // flame radius scale
   pattern: "steady" | "pulse" | "flicker" | "stagger";
 }
-// Ports for the 8 SVG mechs sit on each sprite's rear nozzle, scaled by MECH_ART_SCALE (0.75);
+// Ports for the SVG mechs (all 11, vault mechs included) sit on each sprite's rear nozzle, scaled by MECH_ART_SCALE (0.75);
 // flame colours match each sprite's glow (and the mech accent in data.ts where set).
 export const MECH_BOOSTERS: Record<MechId, BoosterSpec> = {
   aether: { ports: [[-13.5, 0]], color: "#ff8a4a", core: "#fff0e0", size: 1.2, pattern: "steady" },
@@ -124,8 +124,8 @@ export const MECH_BOOSTERS: Record<MechId, BoosterSpec> = {
   storm: { ports: [[-10, 0]], color: "#ff3a7a", core: "#ffd8e6", size: 1, pattern: "stagger" },
   vulture: { ports: [[-12, 0]], color: "#7ae070", core: "#e0ffd8", size: 1.1, pattern: "pulse" },
   cross: { ports: [[-8, 0]], color: "#5ae0ff", core: "#e8fcff", size: 1.1, pattern: "steady" },
-  moth: { ports: [[-14, -4], [-14, 4]], color: "#ffd08a", core: "#fff6e0", size: 0.8, pattern: "pulse" },
-  kiln: { ports: [[-24, -6], [-24, 6]], color: "#ff6a1a", core: "#ffe0a0", size: 1.3, pattern: "flicker" },
+  moth: { ports: [[-24, -3], [-24, 3]], color: "#ffd08a", core: "#fff6e0", size: 0.8, pattern: "pulse" },
+  kiln: { ports: [[-26, -6], [-26, 6]], color: "#ff6a1a", core: "#ffe0a0", size: 1.3, pattern: "flicker" },
   kite: { ports: [[-22, 0]], color: "#ff5a8a", core: "#ffe0ec", size: 1.1, pattern: "stagger" },
 };
 
