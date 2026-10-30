@@ -452,7 +452,7 @@ function HudOverlay({
           {hud?.paused ? <Play className="size-4" /> : <Pause className="size-4" />}
         </button>
       </div>
-      <div className="absolute bottom-6 right-24 hidden sm:block">
+      <div className="absolute bottom-6 right-24 hidden pointer-fine:sm:block">
         <div
           className={cn(
             "grid size-16 place-items-center rounded-full border px-2 text-center font-display text-[11px] font-semibold uppercase tracking-wider",
@@ -466,6 +466,11 @@ function HudOverlay({
   );
 }
 
+/**
+ * Floating thumb stick. The base appears wherever the thumb lands inside the
+ * catch zone (and follows the thumb if it slides past the rim, so reversing is
+ * instant). Dead zone + response curve are applied in GameInput.
+ */
 function TouchStick({
   side,
   onMove,
@@ -476,51 +481,91 @@ function TouchStick({
   label: string;
 }) {
   const origin = useRef<{ x: number; y: number; id: number } | null>(null);
+  const zoneRef = useRef<HTMLDivElement>(null);
+  const baseRef = useRef<HTMLDivElement>(null);
   const knobRef = useRef<HTMLDivElement>(null);
   const RADIUS = 40;
-  const REACH = side === "left" ? 56 : 48;
+  const REACH = side === "left" ? 52 : 46;
 
+  const placeBase = (clientX: number, clientY: number, active: boolean) => {
+    const base = baseRef.current;
+    const zone = zoneRef.current;
+    if (!base || !zone) return;
+    if (!active) {
+      base.style.transform = "";
+      base.dataset.active = "0";
+      return;
+    }
+    const zr = zone.getBoundingClientRect();
+    const br = base.offsetParent?.getBoundingClientRect();
+    if (!br) return;
+    // base is positioned by its rest spot; translate it so its centre sits under the thumb
+    const restX = base.offsetLeft + base.offsetWidth / 2 + br.left;
+    const restY = base.offsetTop + base.offsetHeight / 2 + br.top;
+    const cx = Math.max(zr.left + 8, Math.min(zr.right - 8, clientX));
+    const cy = Math.max(zr.top + 8, Math.min(zr.bottom - 8, clientY));
+    base.style.transform = `translate(${cx - restX}px, ${cy - restY}px)`;
+    base.dataset.active = "1";
+  };
   const setKnob = (nx: number, ny: number) => {
     if (knobRef.current) {
       knobRef.current.style.transform = `translate(${nx * RADIUS}px, ${ny * RADIUS}px)`;
     }
   };
-  const release = () => {
+  const release = (e?: React.PointerEvent) => {
+    if (e && origin.current && origin.current.id !== e.pointerId) return;
     origin.current = null;
     onMove(0, 0);
     setKnob(0, 0);
+    placeBase(0, 0, false);
   };
 
   return (
     <>
       {/* Generous invisible catch-zone: thumb can land anywhere here, not just on the graphic. */}
       <div
+        ref={zoneRef}
         data-testid={`touch-${side}`}
-        className={cn("absolute bottom-0 h-[42%] w-[48%] touch-none sm:hidden", side === "left" ? "left-0" : "right-0")}
+        className={cn(
+          "absolute bottom-0 hidden h-[46%] w-[50%] touch-none select-none pointer-coarse:block",
+          side === "left" ? "left-0" : "right-0",
+        )}
         onPointerDown={(e) => {
+          if (origin.current) return;
           (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
           origin.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+          placeBase(e.clientX, e.clientY, true);
         }}
         onPointerMove={(e) => {
-          if (!origin.current || origin.current.id !== e.pointerId) return;
-          let nx = (e.clientX - origin.current.x) / REACH;
-          let ny = (e.clientY - origin.current.y) / REACH;
-          const m = Math.hypot(nx, ny);
-          if (m > 1) {
-            nx /= m;
-            ny /= m;
+          const o = origin.current;
+          if (!o || o.id !== e.pointerId) return;
+          let dx = e.clientX - o.x;
+          let dy = e.clientY - o.y;
+          const d = Math.hypot(dx, dy);
+          if (d > REACH) {
+            // drag the base along behind the thumb
+            o.x = e.clientX - (dx / d) * REACH;
+            o.y = e.clientY - (dy / d) * REACH;
+            placeBase(o.x, o.y, true);
+            dx = e.clientX - o.x;
+            dy = e.clientY - o.y;
           }
+          const nx = dx / REACH;
+          const ny = dy / REACH;
           onMove(nx, ny);
           setKnob(nx, ny);
         }}
         onPointerUp={release}
         onPointerCancel={release}
+        onLostPointerCapture={release}
       />
-      {/* Visible joystick: a fixed anchor showing current stick direction. */}
+      {/* Visible joystick: rests in the corner, jumps to the thumb while held. */}
       <div
+        ref={baseRef}
+        data-active="0"
         className={cn(
-          "pointer-events-none absolute bottom-7 grid size-24 place-items-center rounded-full border border-border/60 bg-surface/35 sm:hidden",
-          side === "left" ? "left-7" : "right-7",
+          "pointer-events-none absolute bottom-8 hidden size-24 place-items-center rounded-full border border-border/60 bg-surface/30 opacity-60 transition-opacity duration-150 data-[active=1]:opacity-100 pointer-coarse:grid",
+          side === "left" ? "left-8" : "right-8",
         )}
         aria-hidden="true"
       >
@@ -547,7 +592,7 @@ function TouchPad({ input }: { input: GameInput }) {
       <TouchStick side="right" label="Aim" onMove={(x, y) => input.setRightStick(x, y)} />
       <button
         type="button"
-        className="absolute bottom-[calc(42%+0.5rem)] right-5 grid size-16 place-items-center rounded-full border border-border bg-surface/80 font-display text-[11px] font-semibold uppercase tracking-wider sm:hidden"
+        className="absolute bottom-[calc(46%+0.5rem)] right-5 hidden size-16 landscape:right-32 place-items-center rounded-full border border-border bg-surface/80 font-display text-[11px] font-semibold uppercase tracking-wider pointer-coarse:grid"
         onPointerDown={(e) => {
           e.preventDefault();
           e.stopPropagation();

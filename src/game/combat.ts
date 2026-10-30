@@ -1,7 +1,7 @@
 import { MECH_MAP, PERKS, PERK_MAP, WORLD, xpForLevel, rollGear } from "./data";
 import { GameAudio } from "./audio";
 import { GameInput } from "./input";
-import { angleDiff, applyAimAssist, getAimAssistPref } from "./aim";
+import { angleDiff, applyAimAssist, getAimAssistPref, smoothAim } from "./aim";
 import { drawEnemyTop, drawMechTop, drawObstacle, drawPickup } from "./sprites";
 import { MECH_BOOSTERS } from "./mecha";
 import { mechArtVersion } from "./mech-art";
@@ -167,6 +167,63 @@ export type CombatHooks = {
   onQuality?: (q: Quality) => void;
 };
 
+/**
+ * Render interpolation for a fixed-size pool. The sim runs at a fixed 60 Hz
+ * step; drawing at the blend between the last two steps removes the
+ * judder you get when the display (120 Hz on an S25, or uneven rAF) and the
+ * sim step don't line up.
+ */
+class Interp {
+  private o: Float32Array;
+  private r: Float32Array;
+  private a: Uint8Array;
+  private m: Uint8Array;
+  constructor(n: number) {
+    this.o = new Float32Array(n * 2);
+    this.r = new Float32Array(n * 2);
+    this.a = new Uint8Array(n);
+    this.m = new Uint8Array(n);
+  }
+  snap(list: { alive: boolean; x: number; y: number }[]) {
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i]!;
+      this.o[i * 2] = e.x;
+      this.o[i * 2 + 1] = e.y;
+      this.a[i] = e.alive ? 1 : 0;
+    }
+  }
+  apply(list: { alive: boolean; x: number; y: number }[], t: number) {
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i]!;
+      // only blend things that existed at the start of the step (no streak from a recycled slot)
+      if (!e.alive || !this.a[i]) {
+        this.m[i] = 0;
+        continue;
+      }
+      const ox = this.o[i * 2]!;
+      const oy = this.o[i * 2 + 1]!;
+      const dx = e.x - ox;
+      const dy = e.y - oy;
+      if (dx * dx + dy * dy > 160 * 160) {
+        this.m[i] = 0; // teleport / wrap: don't smear
+        continue;
+      }
+      this.m[i] = 1;
+      this.r[i * 2] = e.x;
+      this.r[i * 2 + 1] = e.y;
+      e.x = ox + dx * t;
+      e.y = oy + dy * t;
+    }
+  }
+  restore(list: { alive: boolean; x: number; y: number }[]) {
+    for (let i = 0; i < list.length; i++) {
+      if (!this.m[i]) continue;
+      list[i]!.x = this.r[i * 2]!;
+      list[i]!.y = this.r[i * 2 + 1]!;
+    }
+  }
+}
+
 function pool<T>(n: number, make: () => T): T[] {
   return Array.from({ length: n }, make);
 }
@@ -212,6 +269,8 @@ export class Combat {
   private pvx = 0;
   private pvy = 0;
   private aim = 0;
+  /** Angle bullets actually leave at this step (aim + light assist). The reticle shows this. */
+  private fireAim = 0;
   private aimManual = false;
   private aimHold = 0;
   private lastYaw = 0;
@@ -229,6 +288,22 @@ export class Combat {
   } | null = null;
   private camX = WORLD / 2;
   private camY = WORLD / 2;
+  private camVX = 0;
+  private camVY = 0;
+  /** Camera of the last drawn frame (interpolated, no shake): what the player sees under the cursor. */
+  private viewCamX = WORLD / 2;
+  private viewCamY = WORLD / 2;
+  // previous-step state for render interpolation
+  private prevPx = WORLD / 2;
+  private prevPy = WORLD / 2;
+  private prevCamX = WORLD / 2;
+  private prevCamY = WORLD / 2;
+  private prevAim = 0;
+  private prevFireAim = 0;
+  private iMobs = new Interp(MAX_ENEMY);
+  private iBullets = new Interp(MAX_BULLET);
+  private iPicks = new Interp(MAX_PICK);
+  private gatSide = 1;
   private hudT = 0;
   private spawnAcc = 0;
   private paceIdx = 0;
@@ -353,6 +428,10 @@ export class Combat {
     this.resize();
     this.camX = this.px;
     this.camY = this.py;
+    this.viewCamX = this.prevCamX = this.camX;
+    this.viewCamY = this.prevCamY = this.camY;
+    this.prevPx = this.px;
+    this.prevPy = this.py;
     this.bindProbe();
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.frame);
@@ -551,13 +630,20 @@ export class Combat {
     window.__controlsTest = {
       getYaw: () => this.lastYaw,
       getSpeed: () => Math.hypot(this.pvx, this.pvy),
+      camera: () => ({ x: this.viewCamX, y: this.viewCamY }),
+      aim: () => ({
+        aim: this.aim,
+        fire: this.fireAim,
+        manual: this.aimManual,
+        screen: { x: this.canvas.clientWidth / 2 + this.px - this.viewCamX, y: this.canvas.clientHeight / 2 + this.py - this.viewCamY },
+      }),
       setKeys: (codes: string[]) => this.input.setKeys(codes),
       state: () => ({
         time: this.time, hp: this.hp, kills: this.kills, level: this.level, sector: this.sector,
         mobs: this.mobs.filter((m) => m.alive).length, bosses: this.bosses, evo: [...this.evo],
         uplinks: this.uplinksWon, over: this.over, quality: this.quality, fps: Math.round(this.gov.fps), leveling: this.leveling, paused: this.paused, hitstop: this.hitstop,
         // player position in CSS px on the canvas (ignores screen shake); used by screenshot tooling
-        screen: { x: this.canvas.clientWidth / 2 + this.px - this.camX, y: this.canvas.clientHeight / 2 + this.py - this.camY },
+        screen: { x: this.canvas.clientWidth / 2 + this.px - this.viewCamX, y: this.canvas.clientHeight / 2 + this.py - this.viewCamY },
       }),
       setQuality: (v: QualityPref) => setQualityPref(v),
     };
@@ -604,6 +690,15 @@ export class Combat {
   };
 
   private step(dt: number) {
+    this.prevPx = this.px;
+    this.prevPy = this.py;
+    this.prevCamX = this.camX;
+    this.prevCamY = this.camY;
+    this.prevAim = this.aim;
+    this.prevFireAim = this.fireAim;
+    this.iMobs.snap(this.mobs);
+    this.iBullets.snap(this.bullets);
+    this.iPicks.snap(this.picks);
     const act = this.input.sample();
     // Esc / P: pause and tell React (pushHud) so the pause menu shows and portals get gameplayStop
     if (act.pause) this.pause(!this.paused);
@@ -640,15 +735,20 @@ export class Combat {
     const targetVX = act.moveX * stats.speed * odMult * momMult;
     const targetVY = act.moveY * stats.speed * odMult * momMult;
     const inputMag = Math.hypot(act.moveX, act.moveY);
-    const accelK = 1 - Math.exp(-(inputMag > 0.05 ? hd.accel : hd.brake) * dt);
+    // Smooth, frame-rate independent velocity easing (exponential approach = critically
+    // damped first-order: no overshoot, no jitter). Each mech keeps its own feel, but
+    // heavy frames no longer feel stuck and light ones no longer slide on ice.
+    const accelRate = 8 + hd.accel * 0.6;
+    const brakeRate = 8 + hd.brake * 0.6;
+    let rate = inputMag > 0.05 ? accelRate : brakeRate;
+    // reversing direction bites as hard as braking, so turnarounds feel crisp
+    if (inputMag > 0.05 && targetVX * this.pvx + targetVY * this.pvy < 0) rate = Math.max(accelRate, brakeRate);
+    const accelK = 1 - Math.exp(-rate * dt);
     this.pvx += (targetVX - this.pvx) * accelK;
     this.pvy += (targetVY - this.pvy) * accelK;
-    if (hd.weave && inputMag > 0.05) {
-      const speedMag = Math.hypot(this.pvx, this.pvy) || 1;
-      const perpAng = Math.atan2(this.pvy, this.pvx) + Math.PI / 2;
-      const w = Math.sin(this.time * 7) * hd.weave * Math.min(1, speedMag / stats.speed);
-      this.pvx += Math.cos(perpAng) * w;
-      this.pvy += Math.sin(perpAng) * w;
+    if (Math.hypot(this.pvx, this.pvy) < 0.5 && inputMag <= 0.05) {
+      this.pvx = 0;
+      this.pvy = 0;
     }
     this.px += this.pvx * dt;
     this.py += this.pvy * dt;
@@ -665,20 +765,20 @@ export class Combat {
     // Player-driven aim: right stick / mouse / tap position aims. With no aim
     // input the guns keep the last manual heading briefly, then follow the
     // direction of travel. Never auto-targets; "light" assist only nudges
-    // toward an enemy already inside a small cone around the crosshair.
+    // toward an enemy already inside a tiny cone around the crosshair.
     let aimAng = this.aim;
     this.aimManual = false;
     if (act.hasAim) {
-      let ax: number;
-      let ay: number;
-      if (Math.hypot(this.input.rightStick.x, this.input.rightStick.y) > 0.05) {
-        ax = this.input.rightStick.x;
-        ay = this.input.rightStick.y;
+      if (act.stickAim) {
+        // thumb stick: filter tremor without adding lag to flicks
+        aimAng = smoothAim(this.aim, Math.atan2(act.aimY, act.aimX), dt);
       } else {
-        ax = this.camX + (act.aimX - cssW / 2) - this.px;
-        ay = this.camY + (act.aimY - cssH / 2) - this.py;
+        // pointer: exact. Screen -> world through the camera the player is looking at
+        // (last drawn frame), measured from the gun's true position.
+        const ax = this.viewCamX + (act.aimX - cssW / 2) - this.px;
+        const ay = this.viewCamY + (act.aimY - cssH / 2) - this.py;
+        if (Math.hypot(ax, ay) > 4) aimAng = Math.atan2(ay, ax);
       }
-      if (Math.hypot(ax, ay) > 0.001) aimAng = Math.atan2(ay, ax);
       this.aimManual = true;
       this.aimHold = 0.9;
     } else if (this.aimHold > 0) {
@@ -689,16 +789,37 @@ export class Combat {
       aimAng = this.aim + angleDiff(this.aim, want) * (1 - Math.exp(-10 * dt));
     }
     this.aim = aimAng;
-    const fireAng = getAimAssistPref() === "light" ? applyAimAssist(aimAng, this.px, this.py, this.mobs) : aimAng;
+    const fireAng =
+      this.aimManual && getAimAssistPref() === "light" ? applyAimAssist(aimAng, this.px, this.py, this.mobs) : aimAng;
+    this.fireAim = fireAng;
     const aimX = Math.cos(fireAng);
     const aimY = Math.sin(fireAng);
 
-    const look = 70;
-    const tx = this.px + aimX * look;
-    const ty = this.py + aimY * look;
-    const k = 1 - Math.exp(-6 * dt);
-    this.camX += (tx - this.camX) * k;
-    this.camY += (ty - this.camY) * k;
+    // Camera: critically damped spring (SmoothDamp) toward the player plus a small
+    // look-ahead in the aim and travel directions. Frame-rate independent, never overshoots.
+    const leadT = 0.16;
+    let lx = this.pvx * leadT;
+    let ly = this.pvy * leadT;
+    const lm = Math.hypot(lx, ly);
+    if (lm > 70) {
+      lx *= 70 / lm;
+      ly *= 70 / lm;
+    }
+    const tx = this.px + Math.cos(aimAng) * 40 + lx;
+    const ty = this.py + Math.sin(aimAng) * 40 + ly;
+    const omega = 2 / 0.2;
+    const xk = omega * dt;
+    const ek = 1 / (1 + xk + 0.48 * xk * xk + 0.235 * xk * xk * xk);
+    {
+      const cx = this.camX - tx;
+      const tmp = (this.camVX + omega * cx) * dt;
+      this.camVX = (this.camVX - omega * tmp) * ek;
+      this.camX = tx + (cx + tmp) * ek;
+      const cy = this.camY - ty;
+      const tmpY = (this.camVY + omega * cy) * dt;
+      this.camVY = (this.camVY - omega * tmpY) * ek;
+      this.camY = ty + (cy + tmpY) * ek;
+    }
 
     if (this.fireCd <= 0) {
       this.shoot(aimX, aimY);
@@ -836,13 +957,14 @@ export class Combat {
       ember: "#ff8a3a",
       tether: "#ff8ab0",
     };
-    const fireOne = (ang: number, speed: number, r: number, life: number, extra = 0, forceExplode = 0) => {
+    // lat: sideways barrel offset (px) so twin guns fire parallel to the aim line, not at an angle
+    const fireOne = (ang: number, speed: number, r: number, life: number, extra = 0, forceExplode = 0, lat = 0) => {
       const b = this.bullets.find((x) => !x.alive);
       this.lastBullet = b ?? null;
       if (!b) return;
       b.alive = true;
-      b.x = this.px + Math.cos(ang) * 22;
-      b.y = this.py + Math.sin(ang) * 22;
+      b.x = this.px + Math.cos(ang) * 22 - Math.sin(ang) * lat;
+      b.y = this.py + Math.sin(ang) * 22 + Math.cos(ang) * lat;
       b.vx = Math.cos(ang) * speed;
       b.vy = Math.sin(ang) * speed;
       const isCrit = Math.random() < stats.crit;
@@ -864,14 +986,16 @@ export class Combat {
     if (mech.weapon === "beam") {
       for (let i = 0; i < forks; i++) {
         const o = (i - (forks - 1) / 2) * 0.12;
-        fireOne(baseAng + o, 720, 4.5, stats.range / 720);
-        fireOne(baseAng + o + 0.05, 700, 3.5, stats.range / 700);
+        fireOne(baseAng + o, 720, 4.5, stats.range / 720, 0, 0, -4);
+        fireOne(baseAng + o, 720, 3.5, stats.range / 720, 0, 0, 4);
       }
     } else if (mech.weapon === "gatling") {
       for (let i = 0; i < forks; i++) {
-        const o = (Math.random() - 0.5) * 0.22 * spreadN + (i - (forks - 1) / 2) * 0.1;
-        fireOne(baseAng + o, 820, 3.2, stats.range / 820);
+        // no random bloom: rounds go down the aim line, alternating left/right barrel
+        const o = (i - (forks - 1) / 2) * 0.1;
+        fireOne(baseAng + o, 820, 3.2, stats.range / 820, 0, 0, this.gatSide * 4);
       }
+      this.gatSide = -this.gatSide;
     } else if (mech.weapon === "melee") {
       const arc = 0.7 * spreadN;
       const n = 5 + forks;
@@ -892,7 +1016,7 @@ export class Combat {
       }
     } else if (mech.weapon === "mortar") {
       for (let i = 0; i < forks; i++) {
-        const o = (i - (forks - 1) / 2) * 0.08 + (Math.random() - 0.5) * 0.05;
+        const o = (i - (forks - 1) / 2) * 0.08;
         fireOne(baseAng + o, 300, 6, 0.9, 0, 34);
       }
     } else if (mech.weapon === "mote") {
@@ -906,8 +1030,9 @@ export class Combat {
       // short furnace spray; embers pop in tiny bursts
       const pellets = 6 + forks;
       for (let i = 0; i < pellets; i++) {
-        const o = (Math.random() - 0.5) * 0.9 * spreadN;
-        fireOne(baseAng + o, 420 + Math.random() * 120, 4.5, stats.range / 480, 0, 14);
+        // even fan centred on the aim line (was random scatter); speeds staggered for a spray look
+        const o = ((i + 0.5) / pellets - 0.5) * 0.7 * spreadN;
+        fireOne(baseAng + o, 420 + (((i * 5) % pellets) / pellets) * 120, 4.5, stats.range / 480, 0, 14);
       }
     } else if (mech.weapon === "tether") {
       // tethered blades fly out, then snap back to the frame (hitting on both legs)
@@ -1956,7 +2081,42 @@ export class Combat {
     });
   }
 
+  /** Draw the blend between the last two sim steps (see Interp), then put sim state back. */
   private draw() {
+    const t = Math.max(0, Math.min(1, this.acc / STEP));
+    const sPx = this.px, sPy = this.py, sCx = this.camX, sCy = this.camY, sAim = this.aim, sFire = this.fireAim;
+    const lerp = (a: number, b: number) => a + (b - a) * t;
+    const lerpAng = (a: number, b: number) => a + angleDiff(a, b) * t;
+    const jump = Math.hypot(sPx - this.prevPx, sPy - this.prevPy) > 160;
+    if (!jump) {
+      this.px = lerp(this.prevPx, sPx);
+      this.py = lerp(this.prevPy, sPy);
+      this.camX = lerp(this.prevCamX, sCx);
+      this.camY = lerp(this.prevCamY, sCy);
+    }
+    this.aim = lerpAng(this.prevAim, sAim);
+    this.fireAim = lerpAng(this.prevFireAim, sFire);
+    this.viewCamX = this.camX;
+    this.viewCamY = this.camY;
+    this.iMobs.apply(this.mobs, t);
+    this.iBullets.apply(this.bullets, t);
+    this.iPicks.apply(this.picks, t);
+    try {
+      this.drawScene();
+    } finally {
+      this.iMobs.restore(this.mobs);
+      this.iBullets.restore(this.bullets);
+      this.iPicks.restore(this.picks);
+      this.px = sPx;
+      this.py = sPy;
+      this.camX = sCx;
+      this.camY = sCy;
+      this.aim = sAim;
+      this.fireAim = sFire;
+    }
+  }
+
+  private drawScene() {
     const ctx = this.ctx;
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
@@ -2224,24 +2384,33 @@ export class Combat {
     ctx.drawImage(mechSpr.c, -mechSpr.half, -mechSpr.half, mechSpr.half * 2, mechSpr.half * 2);
     ctx.restore();
     ctx.globalAlpha = 1;
-    // aim reticle: a small chevron out front so manual aim reads on a phone
+    // Aim line + reticle drawn on the exact angle the guns fire at (assist included),
+    // so what you see is where the shots go.
     {
-      const ca2 = Math.cos(this.aim);
-      const sa2 = Math.sin(this.aim);
-      const rx = this.px + ca2 * 64;
-      const ry = this.py + sa2 * 64;
+      const on = this.aimManual ? 1 : 0.45;
       ctx.save();
-      ctx.translate(rx, ry);
-      ctx.rotate(this.aim);
-      ctx.globalAlpha = this.aimManual ? 0.85 : 0.4;
-      ctx.strokeStyle = MECH_MAP[this.mechId].accent;
-      ctx.lineWidth = 2.5;
+      ctx.translate(this.px, this.py);
+      ctx.rotate(this.fireAim);
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
+      ctx.strokeStyle = MECH_MAP[this.mechId].accent;
+      // faint sight line: short dashes that fade with distance
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 6; i++) {
+        const d0 = 34 + i * 20;
+        ctx.globalAlpha = on * 0.42 * (1 - i / 6);
+        ctx.beginPath();
+        ctx.moveTo(d0, 0);
+        ctx.lineTo(d0 + 9, 0);
+        ctx.stroke();
+      }
+      // chevron at the end of the line
+      ctx.globalAlpha = this.aimManual ? 0.9 : 0.4;
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.moveTo(-6, -7);
-      ctx.lineTo(2, 0);
-      ctx.lineTo(-6, 7);
+      ctx.moveTo(150, -7);
+      ctx.lineTo(158, 0);
+      ctx.lineTo(150, 7);
       ctx.stroke();
       ctx.restore();
       ctx.globalAlpha = 1;
@@ -2531,6 +2700,8 @@ declare global {
     __controlsTest?: {
       getYaw: () => number;
       getSpeed: () => number;
+      camera?: () => { x: number; y: number };
+      aim?: () => { aim: number; fire: number; manual: boolean; screen: { x: number; y: number } };
       setKeys: (codes: string[]) => void;
       state?: () => Record<string, unknown>;
       spawn?: (n: number) => void;

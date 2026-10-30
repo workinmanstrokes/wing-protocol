@@ -6,6 +6,8 @@ export type Actions = {
   skill: boolean;
   pause: boolean;
   hasAim: boolean;
+  /** true when aimX/aimY is a stick direction (else a pointer position in CSS px). */
+  stickAim: boolean;
 };
 
 const GAME_KEYS = new Set([
@@ -24,12 +26,23 @@ const GAME_KEYS = new Set([
   "Escape",
 ]);
 
-function radial(x: number, y: number, dz = 0.18) {
+/**
+ * Radial dead zone + response curve. Output magnitude is rescaled so it starts
+ * at 0 right outside the dead zone (no jump), then shaped by `curve` (>1 gives
+ * finer control near the centre while still reaching full speed at the rim).
+ */
+export function radial(x: number, y: number, dz = 0.18, curve = 1) {
   const m = Math.hypot(x, y);
   if (m < dz) return { x: 0, y: 0 };
-  const scale = (m - dz) / (1 - dz) / m;
+  const lin = Math.min(1, (m - dz) / (1 - dz));
+  const scale = (curve === 1 ? lin : Math.pow(lin, curve)) / m;
   return { x: x * scale, y: y * scale };
 }
+
+/** Movement stick: small dead zone, gentle curve. Aim stick: direction only, so no curve. */
+export const MOVE_DZ = 0.12;
+export const MOVE_CURVE = 1.35;
+export const AIM_DZ = 0.2;
 
 export class GameInput {
   private keys = new Set<string>();
@@ -37,6 +50,7 @@ export class GameInput {
   pointer = { x: 0, y: 0, down: false, over: false };
   leftStick = { x: 0, y: 0 };
   rightStick = { x: 0, y: 0 };
+  private padRight = { x: 0, y: 0 };
   skillTap = false;
   pauseTap = false;
   private prevSkill = false;
@@ -56,9 +70,12 @@ export class GameInput {
     };
     const clear = () => this.keys.clear();
     const onPointer = (e: PointerEvent) => {
+      // CSS px in the canvas' own layout box (corrects for any CSS transform/zoom on a wrapper)
       const r = el.getBoundingClientRect();
-      this.pointer.x = e.clientX - r.left;
-      this.pointer.y = e.clientY - r.top;
+      const sx = r.width > 0 ? el.clientWidth / r.width : 1;
+      const sy = r.height > 0 ? el.clientHeight / r.height : 1;
+      this.pointer.x = (e.clientX - r.left) * sx;
+      this.pointer.y = (e.clientY - r.top) * sy;
       this.pointer.over = true;
       if (e.type === "pointerdown" && e.button === 0) this.pointer.down = true;
       if (e.type === "pointerup" || e.type === "pointercancel") this.pointer.down = false;
@@ -102,11 +119,11 @@ export class GameInput {
   }
 
   setLeftStick(x: number, y: number) {
-    this.leftStick = radial(x, y);
+    this.leftStick = radial(x, y, MOVE_DZ, MOVE_CURVE);
   }
 
   setRightStick(x: number, y: number) {
-    this.rightStick = radial(x, y, 0.22);
+    this.rightStick = radial(x, y, AIM_DZ);
   }
 
   sample(): Actions {
@@ -120,16 +137,19 @@ export class GameInput {
     mx += this.leftStick.x;
     my += this.leftStick.y;
 
+    this.padRight.x = 0;
+    this.padRight.y = 0;
     const pads = typeof navigator !== "undefined" ? navigator.getGamepads?.() : [];
     if (pads) {
       for (const p of pads) {
         if (!p || p.mapping !== "standard") continue;
-        const ls = radial(p.axes[0] ?? 0, p.axes[1] ?? 0);
-        const rs = radial(p.axes[2] ?? 0, p.axes[3] ?? 0, 0.22);
+        const ls = radial(p.axes[0] ?? 0, p.axes[1] ?? 0, MOVE_DZ, MOVE_CURVE);
+        const rs = radial(p.axes[2] ?? 0, p.axes[3] ?? 0, AIM_DZ);
         mx += ls.x;
         my += ls.y;
-        this.rightStick.x += rs.x;
-        this.rightStick.y += rs.y;
+        // per-sample (not accumulated) so the pad stick never drifts
+        this.padRight.x += rs.x;
+        this.padRight.y += rs.y;
         if (p.buttons[0]?.pressed || p.buttons[7]?.pressed) this.skillTap = true;
         if (p.buttons[9]?.pressed) this.pauseTap = true;
       }
@@ -150,14 +170,16 @@ export class GameInput {
     this.skillTap = false;
     this.pauseTap = false;
 
-    const rs = this.rightStick;
-    const hasStickAim = Math.hypot(rs.x, rs.y) > 0.05;
+    const rsx = this.rightStick.x + this.padRight.x;
+    const rsy = this.rightStick.y + this.padRight.y;
+    const hasStickAim = Math.hypot(rsx, rsy) > 0.02;
     return {
       moveX: mx,
       moveY: my,
-      aimX: hasStickAim ? rs.x : this.pointer.x,
-      aimY: hasStickAim ? rs.y : this.pointer.y,
+      aimX: hasStickAim ? rsx : this.pointer.x,
+      aimY: hasStickAim ? rsy : this.pointer.y,
       hasAim: hasStickAim || this.pointer.over,
+      stickAim: hasStickAim,
       skill,
       pause,
     };
