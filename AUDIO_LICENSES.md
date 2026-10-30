@@ -7,11 +7,13 @@ All audio in `public/audio/` is free to use commercially. Nothing here needs a p
 synthesized offline from code in `scripts/audio/music.py` (no samples, no third-party
 material). They are owned by the Wing Protocol project.
 
+Style: bright 80s outrun / synthpop. The drums are LinnDrum-style, the snares use gated reverb, and the parts are octave basslines, analog poly-brass stabs, DX-style FM bells, arpeggios and major-key lead hooks.
+
 | File | Style | Loop |
 |---|---|---|
-| `menu` | 92 BPM, A minor, ambient synthwave: pads, pluck arp, bell melody | 16 bars, 41.7 s, seamless |
-| `combat_base` | 132 BPM, D minor: drums, driving bass, supersaw pads | 16 bars, 29.1 s, seamless |
-| `combat_top` | same grid: lead, 16th arp, shaker. Fades in with fight intensity | 16 bars, 29.1 s, seamless |
+| `menu` | 120 BPM, F major (I–V–vi–IV), full arrangement | 16 bars, 32.0 s, seamless |
+| `combat_base` | 146 BPM, A major: drums, octave bass, gated pads, brass stabs | 16 bars, 26.3 s, seamless |
+| `combat_top` | same grid: lead hook, FM bell double, 16th arp, tambourine. Fades in with fight intensity | 16 bars, 26.3 s, seamless |
 
 ## Sound effects: Kenney (CC0 1.0)
 Made from samples by **Kenney (www.kenney.nl)**, licensed **Creative Commons Zero (CC0 1.0)**:

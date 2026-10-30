@@ -1,8 +1,10 @@
 """Original Wing Protocol score, synthesized offline (no samples) -> seamless loops.
+80s outrun / synthpop: LinnDrum-style kit, gated-reverb snares, octave basslines,
+poly-brass stabs, FM bells, arps and major-key lead hooks.
 
-menu.ogg            92 BPM, A minor, 16 bars: pads, pluck arp, sub, half-time drums
-combat_base.ogg     132 BPM, D minor, 16 bars: drums, driving bass, supersaw pads
-combat_top.ogg      same grid: lead, 16th arp, ride/perc (faded in by fight intensity)
+menu.ogg            120 BPM, F major (I-V-vi-IV), 16 bars, full mix
+combat_base.ogg     146 BPM, A major, 16 bars: drums, octave bass, pads + brass stabs
+combat_top.ogg      same grid: lead hook, FM bell, 16th arp, tambourine (faded in by intensity)
 Each file is exactly one loop long; tails are wrapped to the start so loops are gapless.
 """
 import os, json
@@ -228,122 +230,227 @@ def master(x, target_rms=0.14):
     return x.astype(np.float32)
 
 
-# ======================= COMBAT (D minor, 132 BPM) =======================
-def combat():
-    T = Track(132, 16)
-    # chord per 2 bars: Dm Bb F C Dm Bb Gm A
-    roots = [38, 34, 41, 36, 38, 34, 43, 45]
-    chords = [[62, 65, 69], [58, 62, 65], [60, 65, 69], [60, 64, 67], [62, 65, 69], [58, 62, 65], [58, 62, 67], [61, 64, 69]]
-    K, SN, CL, HC, HO = kick(), snare(), clap(), hat(), hat(True)
+# ---------- 80s instruments ----------
+
+def linn_kick():
+    n = int(0.32 * SR)
+    t = np.arange(n) / SR
+    f = 55 + 120 * np.exp(-t / 0.022)
+    body = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t / 0.11)
+    knock = bandpass(rng.uniform(-1, 1, n).astype(np.float32), 1800, 1.0) * np.exp(-t / 0.006) * 0.7
+    return (np.tanh((body * 1.5 + knock) * 1.6) * 0.9).astype(np.float32)
+
+
+_IR_GATE = None
+
+
+def gated_snare(size=0.24):
+    """Phil-Collins-style: snare + clap into a big dense room, tail chopped by a gate."""
+    global _IR_GATE
+    n = int(0.6 * SR)
+    t = np.arange(n) / SR
+    tone = np.sin(2 * np.pi * 200 * t) * np.exp(-t / 0.045) * 0.7 + np.sin(2 * np.pi * 340 * t) * np.exp(-t / 0.025) * 0.3
+    nz = bandpass(rng.uniform(-1, 1, n).astype(np.float32), 3800, 0.6) * np.exp(-t / 0.09)
+    dry = np.tanh((tone + nz * 1.2) * 1.4).astype(np.float32)
+    dry = dry + np.pad(clap(), (0, n))[:n] * 0.5
+    if _IR_GATE is None:
+        _IR_GATE = ir(1.6, seed=5)[0]
+    wet = signal.fftconvolve(dry, _IR_GATE)[:n].astype(np.float32)
+    wet = wet / (np.abs(wet).max() + 1e-9) * np.abs(dry).max()
+    gate = np.clip((size + 0.025 - t) / 0.025, 0, 1)
+    return (dry * 0.8 + wet * 1.1 * gate).astype(np.float32)
+
+
+def tamb():
+    n = int(0.12 * SR)
+    t = np.arange(n) / SR
+    jingles = sum(np.sin(2 * np.pi * f * t + rng.random() * 6) for f in (5200, 6900, 8300, 9700)) / 4
+    x = highpass((jingles * 0.5 + rng.uniform(-1, 1, n) * 0.7).astype(np.float32), 6000)
+    return (x * np.exp(-t / 0.035)).astype(np.float32)
+
+
+def oct_bass(m, dur):
+    """Plucky saw bass with a snappy filter envelope (bright -> dark)."""
+    n = int((dur + 0.05) * SR)
+    f = mtof(m)
+    s = polyblep_saw(f, n) * 0.6 + polyblep_saw(f * 1.003, n, 0.4) * 0.4
+    k = np.exp(-np.arange(n) / SR / 0.06)
+    x = lowpass(s, 2600) * k + lowpass(s, 420) * (1 - k)
+    x = x + np.sin(2 * np.pi * f * np.arange(n) / SR) * 0.5
+    return np.tanh(x * adsr(n, 0.002, 0.1, 0.7, 0.03, dur) * 1.4).astype(np.float32)
+
+
+def brass(ms, dur, gain=1.0):
+    """Analog poly-brass stab: detuned saws, filter 'blat' that opens then settles."""
+    out = None
+    for m in ms:
+        n = int((dur + 0.25) * SR)
+        f = mtof(m)
+        L = np.zeros(n, np.float32); R = np.zeros(n, np.float32)
+        for d in (-1, 0, 1):
+            fr = f * 2 ** (d * 0.09 / 12)
+            sw = polyblep_saw(fr, n, rng.random())
+            L += sw * (0.6 - d * 0.3); R += sw * (0.6 + d * 0.3)
+        t = np.arange(n) / SR
+        k = np.clip(t / 0.03, 0, 1) * np.exp(-np.clip(t - 0.03, 0, None) / 0.12)
+        e = adsr(n, 0.008, 0.15, 0.75, 0.12, dur)
+        st = np.stack([lowpass(L, 5200) * k + lowpass(L, 1500) * (1 - k), lowpass(R, 5200) * k + lowpass(R, 1500) * (1 - k)]) * e / 3
+        out = st if out is None else out + st
+    return out * gain
+
+
+def fm_bell(m, dur):
+    """DX7-ish bell / e-piano: 1:3.5 FM with decaying index."""
+    n = int((dur + 1.2) * SR)
+    t = np.arange(n) / SR
+    f = mtof(m)
+    idx = 2.2 * np.exp(-t / 0.25) + 0.3
+    x = np.sin(2 * np.pi * f * t + idx * np.sin(2 * np.pi * f * 3.5 * t)) * 0.7 + np.sin(2 * np.pi * f * 2 * t + idx * 0.5 * np.sin(2 * np.pi * f * t)) * 0.2
+    return (x * np.exp(-t / 0.9) * np.clip(t / 0.002, 0, 1)).astype(np.float32)
+
+
+def hero_lead(m, dur, prev=None):
+    """Bright saw+square lead with delayed vibrato and a short glide from the previous note."""
+    n = int((dur + 0.3) * SR)
+    t = np.arange(n) / SR
+    f = np.full(n, mtof(m))
+    if prev is not None and prev != m:
+        g = np.exp(-t / 0.025)
+        f = f * (mtof(prev) / mtof(m)) ** g
+    f = f * (1 + 0.006 * np.sin(2 * np.pi * 5.8 * t) * np.clip((t - 0.18) / 0.2, 0, 1))
+    sq = polyblep_saw(f, n) - polyblep_saw(f, n, 0.5)
+    s = polyblep_saw(f, n) * 0.45 + polyblep_saw(f * 1.006, n, 0.2) * 0.35 + sq * 0.25
+    s = lowpass(s, 5000)
+    return (s * adsr(n, 0.006, 0.25, 0.8, 0.09, dur)).astype(np.float32)
+
+
+def gate_env(T, n, pattern):
+    """Trance/80s rhythmic gate for pads on a 16th grid (pattern of 16 0/1)."""
+    g = np.zeros(n, np.float32)
+    step = T.beat / 4
+    s = 0
+    while True:
+        a = int(round(s * step * SR))
+        if a >= n: break
+        if pattern[s % 16]:
+            b = min(n, a + int(step * SR * 0.85))
+            g[a:b] = 1
+        s += 1
+    return lowpass(g, 180)
+
+
+def song(T, roots, chords, mel, arp_pat, layers):
+    """Shared arrangement on a 16-bar / 8-chord (2 bars each) grid."""
+    K, SN, TB, HC, HO = linn_kick(), gated_snare(), tamb(), hat(), hat(True)
     for bar in range(16):
         b0 = bar * 4
         for q in range(4):
-            if bar == 15 and q == 3: continue
-            T.add("kick", b0 + q, K, gain=0.95)
+            T.add("kick", b0 + q, K, gain=0.9)
             T.kicks.append(T.at(b0 + q))
         for q in (1, 3):
-            T.add("snare", b0 + q, SN, gain=0.55)
-            T.add("snare", b0 + q, CL, pan=0.1, gain=0.45)
+            T.add("snare", b0 + q, SN, gain=0.6)
         for s in range(16):
-            acc = 0.5 if s % 4 == 2 else (0.32 if s % 2 else 0.22)
             if s % 4 == 2:
-                T.add("hats", b0 + s / 4, HO, pan=0.25, gain=0.22)
+                T.add("hats", b0 + s / 4, HO, pan=0.2, gain=0.18)
             else:
-                T.add("hats", b0 + s / 4, HC, pan=0.25, gain=acc)
-    # fill on the last bar's final beat (snare roll + toms) leading into the loop start
-    for i, s in enumerate(range(12, 16)):
-        T.add("snare", 60 + s / 4, SN, gain=0.3 + 0.1 * i)
-    for i, f in enumerate((180, 140, 110, 90)):
-        T.add("snare", 63 + i / 4, tom(f), pan=-0.3 + 0.2 * i, gain=0.5)
-    T.add("hats", 0, crash(), pan=-0.2, gain=0.35)
-    T.add("hats", 32, crash(), pan=0.2, gain=0.3)
-
-    # driving 8th bass with octave pops
+                T.add("hats", b0 + s / 4, HC, pan=0.2, gain=0.26 if s % 2 else 0.18)
+            if s % 4 == 2 or (s % 8 == 7):
+                T.add("tamb", b0 + s / 4, TB, pan=-0.35, gain=0.22)
+    # classic 80s tom fill into the loop point
+    for i, f in enumerate((220, 180, 150, 120, 100, 85)):
+        T.add("snare", 62.5 + i / 4, tom(f), pan=-0.5 + 0.2 * i, gain=0.55)
+    T.add("hats", 0, crash(), pan=-0.2, gain=0.3)
+    T.add("hats", 32, crash(), pan=0.2, gain=0.25)
+    # driving octave bass (8ths, root / octave)
     for c in range(8):
         r = roots[c]
         for e in range(16):
-            m = r + (12 if e % 4 == 3 else 0)
-            T.add("bass", c * 8 + e * 0.5, bass(m, 0.2, cutoff=700 + 500 * (e % 2)), gain=0.55)
-    # pads
+            T.add("bass", c * 8 + e * 0.5, oct_bass(r + (12 if e % 2 else 0), 0.5 * T.beat * 0.8), gain=0.5)
+    # pads (rhythmically gated) + brass stabs (syncopated: 1, and-of-2, 4)
+    gpat = [1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1]
     for c in range(8):
-        T.add_st("pad", c * 8, pad(chords[c], 8 * T.beat - 0.1, cutoff=2200, a=0.15, r=0.6), gain=0.5)
-
-    # ---- top layer ----
-    mel = [
-        [(0, 74, 3), (3, 72, 1), (4, 69, 4), (8, 65, 2), (10, 67, 2), (12, 69, 4)],
-        [(0, 70, 3), (3, 69, 1), (4, 65, 4), (8, 62, 2), (10, 65, 2), (12, 70, 4)],
-        [(0, 72, 3), (3, 70, 1), (4, 69, 4), (8, 65, 2), (10, 69, 2), (12, 72, 4)],
-        [(0, 76, 4), (4, 74, 2), (6, 72, 2), (8, 67, 6), (14, 72, 2)],
-        [(0, 74, 3), (3, 76, 1), (4, 77, 4), (8, 76, 2), (10, 74, 2), (12, 69, 4)],
-        [(0, 74, 3), (3, 72, 1), (4, 70, 4), (8, 65, 2), (10, 70, 2), (12, 74, 4)],
-        [(0, 70, 3), (3, 72, 1), (4, 74, 4), (8, 79, 4), (12, 77, 2), (14, 74, 2)],
-        [(0, 73, 6), (6, 76, 2), (8, 81, 8)],
-    ]
+        p = pad([m - 12 for m in chords[c]] + [chords[c][0]], 8 * T.beat - 0.05, cutoff=2600, a=0.05, r=0.3)
+        T.add_st("pad", c * 8, p, gain=0.45)
+        for b in (0, 1.5, 3, 4, 5.5, 7):
+            T.add_st("brass", c * 8 + b, brass(chords[c], 0.22 if b not in (3, 7) else 0.4), gain=0.5)
+    T.gpat = gpat
+    # lead hook + bell double
     for c, notes in enumerate(mel):
+        prev = None
         for st, m, ln in notes:
             d = ln * 0.5 * T.beat - 0.02
-            T.add("lead", c * 8 + st * 0.5, lead(m, d), gain=0.32)
-            T.add("lead", c * 8 + st * 0.5, lead(m - 12, d), gain=0.12)
-    pat = [0, 1, 2, 3, 2, 1, 0, 1]
+            T.add("lead", c * 8 + st * 0.5, hero_lead(m, d, prev), gain=0.3 * layers.get("lead", 1))
+            T.add("bell", c * 8 + st * 0.5, fm_bell(m + 12, d), gain=0.12 * layers.get("bell", 1))
+            prev = m
     for c in range(8):
         ch = chords[c] + [chords[c][0] + 12]
         for s in range(32):
-            m = ch[pat[s % 8]] + (12 if (s // 8) % 2 else 0)
-            T.add("arp", c * 8 + s * 0.25, pluck(m, 0.08), pan=(-0.4 if s % 2 else 0.4), gain=0.16)
-    # shaker on 16ths + ride on quarters for drive
-    for bar in range(16):
-        for s in range(16):
-            T.add("perc", bar * 4 + s / 4, hat()[: int(0.03 * SR)], pan=-0.45, gain=0.12 if s % 2 else 0.07)
+            m = ch[arp_pat[s % 8]] + 12
+            T.add("arp", c * 8 + s * 0.25, pluck(m, 0.07, bright=6500, dark=1500), pan=(-0.5 if s % 2 else 0.5), gain=0.14)
 
-    duck = ducking(T)
-    hats = T.bus("hats")
-    base = T.bus("kick") + T.bus("snare") * 1.0 + hats
-    base = base + verb(T.bus("snare"), 1.1, 0.25) - T.bus("snare")
-    base = base + T.bus("bass") * duck + verb(T.bus("pad"), 2.0, 0.5) * duck
-    top = delay(T.bus("lead"), T, 0.75, 0.3, 0.28)
-    top = verb(top, 1.8, 0.35) + delay(T.bus("arp"), T, 0.75, 0.35, 0.35) * duck + T.bus("perc")
-    base, top = T.wrap(base), T.wrap(top)
-    # master both with the same gain so they sum correctly
+
+def mixdown(T, gate_pads=True):
+    n = T.L + T.tail
+    duck = ducking(T, depth=0.5, rel=0.13)
+    pad = T.bus("pad")
+    if gate_pads:
+        pad = pad * gate_env(T, n, T.gpat)
+    base = T.bus("kick") + T.bus("snare") + T.bus("hats") + T.bus("bass") * duck
+    base = base + verb(pad, 1.6, 0.35) * duck + verb(T.bus("brass"), 1.2, 0.3) * duck
+    top = verb(delay(T.bus("lead"), T, 0.75, 0.3, 0.3), 1.8, 0.3)
+    top = top + verb(T.bus("bell"), 1.5, 0.4) + delay(T.bus("arp"), T, 0.75, 0.35, 0.35) * duck + T.bus("tamb")
+    return T.wrap(base), T.wrap(top)
+
+
+def shape_pair(base, top, target=0.15):
     full = base + top
-    g = 0.14 / np.sqrt((full ** 2).mean())
-    shape = lambda x: (np.tanh(np.stack([highpass(x[0], 28), highpass(x[1], 28)]) * g * 1.1) / np.tanh(1.1)).astype(np.float32)
-    b, t = shape(base), shape(top)
-    pk = max(np.abs(b).max(), np.abs(b + t).max())
-    s = min(1, 0.92 / pk)
-    return b * s, t * s, T
+    g = target / np.sqrt((full ** 2).mean())
+    sh = lambda x: (np.tanh(np.stack([highpass(x[0], 30), highpass(x[1], 30)]) * g * 1.1) / np.tanh(1.1)).astype(np.float32)
+    b, t = sh(base), sh(top)
+    s = min(1, 0.92 / max(np.abs(b).max(), np.abs(b + t).max()))
+    return b * s, t * s
 
 
-# ======================= MENU (A minor, 92 BPM) =======================
+# ======================= COMBAT (A major, 146 BPM) =======================
+def combat():
+    T = Track(146, 16)
+    roots = [45, 40, 42, 38, 45, 40, 38, 40]  # A E F#m D | A E D E
+    chords = [[69, 73, 76], [68, 71, 76], [69, 73, 78], [69, 74, 78], [69, 73, 76], [68, 71, 76], [69, 74, 78], [68, 71, 76]]
+    mel = [
+        [(0, 76, 2), (2, 76, 1), (3, 78, 1), (4, 76, 2), (6, 73, 2), (8, 69, 3), (11, 71, 1), (12, 73, 4)],
+        [(0, 71, 2), (2, 71, 1), (3, 73, 1), (4, 71, 2), (6, 68, 2), (8, 64, 4), (12, 68, 2), (14, 71, 2)],
+        [(0, 73, 2), (2, 73, 1), (3, 76, 1), (4, 78, 2), (6, 76, 2), (8, 73, 3), (11, 71, 1), (12, 69, 4)],
+        [(0, 74, 2), (2, 73, 2), (4, 71, 2), (6, 69, 2), (8, 71, 6), (14, 76, 2)],
+        [(0, 76, 2), (2, 76, 1), (3, 78, 1), (4, 76, 2), (6, 73, 2), (8, 81, 3), (11, 80, 1), (12, 78, 4)],
+        [(0, 76, 2), (2, 78, 1), (3, 80, 1), (4, 81, 2), (6, 80, 2), (8, 76, 4), (12, 73, 2), (14, 76, 2)],
+        [(0, 78, 3), (3, 76, 1), (4, 74, 2), (6, 73, 2), (8, 74, 2), (10, 76, 2), (12, 78, 4)],
+        [(0, 80, 4), (4, 78, 2), (6, 80, 2), (8, 80, 4), (12, 83, 4)],
+    ]
+    song(T, roots, [[m - 12 for m in c] for c in chords], mel, [0, 1, 2, 3, 2, 1, 3, 2], {})
+    base, top = mixdown(T)
+    b, t = shape_pair(base, top)
+    return b, t, T
+
+
+# ======================= MENU (F major, 120 BPM) =======================
 def menu():
-    T = Track(92, 16)
-    roots = [33, 29, 36, 31, 33, 29, 26, 28]  # Am F C G Am F Dm E
-    chords = [[57, 60, 64, 67], [53, 57, 60, 64], [55, 60, 64, 67], [55, 59, 62, 67], [57, 60, 64, 71], [53, 57, 60, 65], [50, 57, 62, 65], [52, 56, 59, 64]]
-    K = kick(0.6)
-    for c in range(8):
-        T.add_st("pad", c * 8, pad(chords[c], 8 * T.beat - 0.05, cutoff=1500, a=1.2, r=2.0), gain=0.6)
-        T.add("bass", c * 8, bass(roots[c] + 12, 8 * T.beat - 0.02, cutoff=400, sub=0.9) * 0.8, gain=0.5)
-    for bar in range(16):
-        b0 = bar * 4
-        if bar >= 2:
-            T.add("drums", b0, K, gain=0.7); T.kicks.append(T.at(b0))
-            T.add("drums", b0 + 2.5, K, gain=0.45); T.kicks.append(T.at(b0 + 2.5))
-            T.add("drums", b0 + 2, snare(), gain=0.32)
-            for s in range(8):
-                T.add("drums", b0 + s / 2, hat(), pan=0.3, gain=0.14 if s % 2 else 0.08)
-    pat = [0, 2, 1, 3, 2, 1, 3, 0]
-    for c in range(8):
-        ch = chords[c]
-        for s in range(16):
-            m = ch[pat[s % 8]] + 12
-            T.add("arp", c * 8 + s * 0.5, pluck(m, 0.12, bright=3500, dark=700), pan=(-0.5 if s % 2 else 0.5), gain=0.17)
-    # sparse bell melody (second half)
-    bell = [(32, 76, 2), (34, 74, 1), (35, 72, 1), (36, 72, 3), (40, 67, 4), (44, 69, 2), (46, 72, 2), (48, 76, 3), (51, 79, 1), (52, 77, 4), (56, 76, 2), (58, 74, 2), (60, 71, 4)]
-    for b, m, ln in bell:
-        T.add("lead", b, pluck(m, ln * T.beat * 0.3, bright=6000, dark=1800), gain=0.22)
-    duck = ducking(T, depth=0.35, rel=0.25)
-    mix = verb(T.bus("pad"), 3.0, 0.6) * duck + T.bus("bass") * duck + verb(T.bus("drums"), 1.2, 0.15)
-    mix = mix + verb(delay(T.bus("arp"), T, 0.75, 0.45, 0.45), 2.5, 0.4) + verb(delay(T.bus("lead"), T, 1.5, 0.4, 0.4), 3.0, 0.6)
-    return master(T.wrap(mix), 0.12), T
+    T = Track(120, 16)
+    roots = [41, 36, 38, 34, 41, 36, 34, 36]  # F C Dm Bb | F C Bb C
+    chords = [[65, 69, 72], [64, 67, 72], [65, 69, 74], [65, 70, 74], [65, 69, 72], [64, 67, 72], [65, 70, 74], [64, 67, 72]]
+    mel = [
+        [(0, 72, 2), (2, 74, 2), (4, 77, 3), (7, 76, 1), (8, 74, 2), (10, 72, 2), (12, 69, 4)],
+        [(0, 67, 2), (2, 69, 2), (4, 72, 3), (7, 74, 1), (8, 76, 4), (12, 72, 4)],
+        [(0, 74, 2), (2, 76, 2), (4, 77, 3), (7, 79, 1), (8, 81, 2), (10, 79, 2), (12, 77, 4)],
+        [(0, 77, 2), (2, 76, 2), (4, 74, 2), (6, 72, 2), (8, 74, 6), (14, 72, 2)],
+        [(0, 72, 2), (2, 74, 2), (4, 77, 3), (7, 76, 1), (8, 77, 2), (10, 79, 2), (12, 81, 4)],
+        [(0, 79, 2), (2, 77, 2), (4, 76, 3), (7, 77, 1), (8, 79, 4), (12, 76, 4)],
+        [(0, 77, 3), (3, 76, 1), (4, 74, 2), (6, 72, 2), (8, 70, 2), (10, 72, 2), (12, 74, 4)],
+        [(0, 76, 4), (4, 74, 2), (6, 76, 2), (8, 79, 8)],
+    ]
+    song(T, roots, [[m - 12 for m in c] for c in chords], mel, [0, 2, 1, 3, 2, 1, 3, 0], {"lead": 0.85, "bell": 1.4})
+    base, top = mixdown(T)
+    b, t = shape_pair(base, top, 0.135)
+    return b + t, T
 
 
 os.makedirs(f"{OUT}/music", exist_ok=True)

@@ -32,9 +32,9 @@ export const SFX = {
 } as const;
 
 export const MUSIC = {
-  "menu": 41.73913832199546,
-  "combat_base": 29.09090702947846,
-  "combat_top": 29.09090702947846
+  "menu": 32.0,
+  "combat_base": 26.301360544217687,
+  "combat_top": 26.301360544217687
 } as const;
 
 export type SfxId = keyof typeof SFX;
