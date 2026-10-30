@@ -1,0 +1,51 @@
+{
+  "label": "after",
+  "url": "http://127.0.0.1:8090/",
+  "movement": {
+    "frames": 150,
+    "peakSpeed": 248,
+    "msTo90pct": 131,
+    "msToStopAfterPeak": 317,
+    "onScreenPlayerJerkPx": {
+      "mean": 0.04,
+      "sd": 0.075,
+      "max": 0.602
+    },
+    "cameraSpeedPerFrame": {
+      "mean": 125.213,
+      "sd": 116.175,
+      "max": 415.234
+    }
+  },
+  "aimErrorDeg": {
+    "mean": 0.007,
+    "sd": 0,
+    "max": 0.007
+  },
+  "mobile_portrait": {
+    "sticksVisible": true,
+    "speedWhileDragging": 213.3,
+    "aim": {
+      "aim": -2.2142974355881817,
+      "fire": -2.2142974355881817,
+      "manual": true,
+      "screen": {
+        "x": 237.66383025472373,
+        "y": 484.625666128539
+      }
+    }
+  },
+  "mobile_landscape": {
+    "sticksVisible": true,
+    "speedWhileDragging": 213.3,
+    "aim": {
+      "aim": -2.214297435588181,
+      "fire": -2.214297435588181,
+      "manual": true,
+      "screen": {
+        "x": 489.0717678982835,
+        "y": 233.20536927108333
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "label": "before",
+  "url": "http://127.0.0.1:8090/",
+  "movement": {
+    "frames": 150,
+    "peakSpeed": 248,
+    "msTo90pct": 165,
+    "msToStopAfterPeak": 950,
+    "onScreenPlayerJerkPx": {
+      "mean": 0.048,
+      "sd": 0.067,
+      "max": 0.425
+    },
+    "cameraSpeedPerFrame": "n/a (no camera probe)"
+  },
+  "aimErrorDeg": "n/a (no aim probe on this build)",
+  "mobile_portrait": {
+    "sticksVisible": true,
+    "speedWhileDragging": 200.2,
+    "aim": null
+  },
+  "mobile_landscape": {
+    "sticksVisible": false
+  }
+}

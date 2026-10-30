@@ -9,10 +9,32 @@ export type AimAssistPref = "off" | "light";
 const AKEY = "wing-protocol-aim-assist";
 
 /** Cone half-angle (radians) and range (world px) for light assist. */
-export const ASSIST_CONE = (10 * Math.PI) / 180;
+export const ASSIST_CONE = (6 * Math.PI) / 180;
 export const ASSIST_RANGE = 520;
-/** Fraction of the angle gap closed toward the target (never a full snap). */
-export const ASSIST_PULL = 0.45;
+/**
+ * Peak fraction of the angle gap closed toward the target. The pull fades to
+ * zero at the cone edge, so the correction is continuous (no snap when an enemy
+ * crosses into the cone) and never more than ~1 degree.
+ */
+export const ASSIST_PULL = 0.6;
+
+/** Fraction of `diff` that light assist closes (fades linearly to 0 at the cone edge). */
+export function assistPull(diff: number): number {
+  const a = Math.abs(diff);
+  if (a >= ASSIST_CONE) return 0;
+  return ASSIST_PULL * (1 - a / ASSIST_CONE);
+}
+
+/**
+ * Aim-stick smoothing: filters thumb tremor on small changes but follows big
+ * flicks almost instantly (rate rises with the size of the change), so it
+ * never feels laggy. Frame-rate independent.
+ */
+export function smoothAim(current: number, target: number, dt: number): number {
+  const d = angleDiff(current, target);
+  const rate = 30 + 900 * Math.abs(d);
+  return current + d * (1 - Math.exp(-rate * dt));
+}
 
 export function defaultAimAssist(): AimAssistPref {
   try {
@@ -80,5 +102,5 @@ export function applyAimAssist(aim: number, px: number, py: number, targets: Ite
       found = true;
     }
   }
-  return found ? aim + best * ASSIST_PULL : aim;
+  return found ? aim + best * assistPull(best) : aim;
 }
