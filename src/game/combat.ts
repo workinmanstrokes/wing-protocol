@@ -1,6 +1,7 @@
 import { MECH_MAP, PERKS, PERK_MAP, WORLD, xpForLevel, rollGear } from "./data";
 import { GameAudio } from "./audio";
 import { GameInput } from "./input";
+import { angleDiff, applyAimAssist, getAimAssistPref } from "./aim";
 import { drawEnemyTop, drawMechTop, drawObstacle, drawPickup } from "./sprites";
 import { MECH_BOOSTERS } from "./mecha";
 import { mechArtVersion } from "./mech-art";
@@ -211,6 +212,8 @@ export class Combat {
   private pvx = 0;
   private pvy = 0;
   private aim = 0;
+  private aimManual = false;
+  private aimHold = 0;
   private lastYaw = 0;
   private hp = 100;
   private maxHp = 100;
@@ -658,33 +661,36 @@ export class Combat {
 
     const cssW = this.canvas.clientWidth;
     const cssH = this.canvas.clientHeight;
-    let aimX = Math.cos(this.aim);
-    let aimY = Math.sin(this.aim);
+    // Player-driven aim: right stick / mouse / tap position aims. With no aim
+    // input the guns keep the last manual heading briefly, then follow the
+    // direction of travel. Never auto-targets; "light" assist only nudges
+    // toward an enemy already inside a small cone around the crosshair.
+    let aimAng = this.aim;
+    this.aimManual = false;
     if (act.hasAim) {
+      let ax: number;
+      let ay: number;
       if (Math.hypot(this.input.rightStick.x, this.input.rightStick.y) > 0.05) {
-        aimX = this.input.rightStick.x;
-        aimY = this.input.rightStick.y;
+        ax = this.input.rightStick.x;
+        ay = this.input.rightStick.y;
       } else {
-        const wx = this.camX + (act.aimX - cssW / 2);
-        const wy = this.camY + (act.aimY - cssH / 2);
-        aimX = wx - this.px;
-        aimY = wy - this.py;
+        ax = this.camX + (act.aimX - cssW / 2) - this.px;
+        ay = this.camY + (act.aimY - cssH / 2) - this.py;
       }
-      const am = Math.hypot(aimX, aimY) || 1;
-      aimX /= am;
-      aimY /= am;
-      this.aim = Math.atan2(aimY, aimX);
-    } else {
-      const n = this.nearestMob();
-      if (n) {
-        aimX = n.x - this.px;
-        aimY = n.y - this.py;
-        const am = Math.hypot(aimX, aimY) || 1;
-        aimX /= am;
-        aimY /= am;
-        this.aim = Math.atan2(aimY, aimX);
-      }
+      if (Math.hypot(ax, ay) > 0.001) aimAng = Math.atan2(ay, ax);
+      this.aimManual = true;
+      this.aimHold = 0.9;
+    } else if (this.aimHold > 0) {
+      this.aimHold -= dt;
+    } else if (inputMag > 0.05) {
+      // ease toward heading so releasing the aim stick doesn't snap the guns
+      const want = Math.atan2(act.moveY, act.moveX);
+      aimAng = this.aim + angleDiff(this.aim, want) * (1 - Math.exp(-10 * dt));
     }
+    this.aim = aimAng;
+    const fireAng = getAimAssistPref() === "light" ? applyAimAssist(aimAng, this.px, this.py, this.mobs) : aimAng;
+    const aimX = Math.cos(fireAng);
+    const aimY = Math.sin(fireAng);
 
     const look = 70;
     const tx = this.px + aimX * look;
@@ -2212,6 +2218,28 @@ export class Combat {
     ctx.drawImage(mechSpr.c, -mechSpr.half, -mechSpr.half, mechSpr.half * 2, mechSpr.half * 2);
     ctx.restore();
     ctx.globalAlpha = 1;
+    // aim reticle: a small chevron out front so manual aim reads on a phone
+    {
+      const ca2 = Math.cos(this.aim);
+      const sa2 = Math.sin(this.aim);
+      const rx = this.px + ca2 * 64;
+      const ry = this.py + sa2 * 64;
+      ctx.save();
+      ctx.translate(rx, ry);
+      ctx.rotate(this.aim);
+      ctx.globalAlpha = this.aimManual ? 0.85 : 0.4;
+      ctx.strokeStyle = MECH_MAP[this.mechId].accent;
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(-6, -7);
+      ctx.lineTo(2, 0);
+      ctx.lineTo(-6, 7);
+      ctx.stroke();
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
     if (this.lure.t > 0) {
       const g = glowSprite("#ffb347", true);
       const pr = 18 + Math.sin(this.time * 12) * 4;
