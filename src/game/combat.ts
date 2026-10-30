@@ -400,7 +400,7 @@ export class Combat {
       } else {
         this.surgeT = e.dur ?? 8;
         this.announce(this.time > 280 ? "FINAL STAND · HOLD OUT" : "SWARM SURGE", 2);
-        this.audio.bossAlert();
+        this.audio.alert();
         for (let i = 0; i < 4; i++) {
           const a = (i / 4) * Math.PI * 2 + Math.random();
           this.spawnMob(false, "swarm", { x: this.px + Math.cos(a) * 560, y: this.py + Math.sin(a) * 560 });
@@ -657,6 +657,7 @@ export class Combat {
     this.resolvePlayerWrecks();
 
     const spd = Math.hypot(this.pvx, this.pvy);
+    this.audio.setThrust(spd / Math.max(1, stats.speed));
     if (spd > 8) this.lastYaw = Math.atan2(-this.pvx, -this.pvy);
 
     const cssW = this.canvas.clientWidth;
@@ -744,7 +745,7 @@ export class Combat {
       this.sector = sec;
       this.announce(SECTORS[sec]!.name, 2.8);
       this.seedWrecks();
-      this.audio.bossAlert();
+      this.audio.alert();
       this.hp = Math.min(this.maxHp, this.hp + this.maxHp * 0.1);
     }
     this.updateHazards(dt);
@@ -1245,6 +1246,7 @@ export class Combat {
         h.alive = false;
         this.spawnRing(h.x, h.y, h.r, 0.35, h.color, 5);
         this.explodeFx(h.x, h.y, h.r, h.color);
+        this.audio.explode();
         this.trauma = Math.min(1, this.trauma + 0.2);
         this.hurtCircle(h.x, h.y, h.r, h.dmg * 1.5, false);
         if (Math.hypot(this.px - h.x, this.py - h.y) < h.r + 12) this.damagePlayer(h.dmg);
@@ -1503,7 +1505,10 @@ export class Combat {
       b.y += b.vy * dt;
       b.life -= dt;
       if (b.life <= 0) {
-        if (b.friendly && b.explode > 0) this.hurtCircle(b.x, b.y, b.explode, b.dmg * 0.6, false);
+        if (b.friendly && b.explode > 0) {
+          this.hurtCircle(b.x, b.y, b.explode, b.dmg * 0.6, false);
+          this.audio.explode();
+        }
         b.alive = false;
           b.ret = 0;
         continue;
@@ -1615,6 +1620,7 @@ export class Combat {
       this.hitstop = 0.07;
       this.spawnRing(m.x, m.y, 100, 0.65, "#ff8a5c", 4);
       this.explodeFx(m.x, m.y, 120, "#ff8a5c");
+      this.audio.explodeBig();
       this.screenFlash("#fff1dc", 0.35);
       this.announce(`${m.kind.toUpperCase()} DOWN`, 2);
       this.drop("chest", m.x, m.y, 1, Math.random() < 0.45 || m.kind === "warden" ? "legendary" : "epic");
@@ -1702,7 +1708,7 @@ export class Combat {
       }
       if (d < 22) {
         p.alive = false;
-        this.audio.pickup();
+        this.audio.pickup(p.kind);
         if (p.kind === "xp") {
           this.xp += p.value;
           this.checkLevel();

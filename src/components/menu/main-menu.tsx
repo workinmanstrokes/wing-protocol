@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Gem, KeyRound, Puzzle, Settings, Volume2, VolumeX, Wallet, Wrench, Store, Users, Rocket } from "lucide-react";
+import { Gem, KeyRound, Puzzle, Settings, Wallet, Wrench, Store, Users, Rocket } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { touchMissions } from "@/game/save";
 import { isComplete } from "@/game/meta/missions";
@@ -8,7 +8,7 @@ import { PlayTab, type StartSpec } from "./play-tab";
 import { HangarTab } from "./hangar-tab";
 import { StoreTab } from "./store-tab";
 import { PilotsTab } from "./pilots-tab";
-import { AimAssistToggle, GraphicsToggle } from "./settings";
+import { AimAssistToggle, AudioSettings, GraphicsToggle } from "./settings";
 import { Modal, useSave } from "./shared";
 
 export type MenuTab = "play" | "hangar" | "store" | "pilots";
@@ -102,20 +102,13 @@ export function MainMenu({
       {settings && (
         <Modal label="Settings" onClose={() => setSettings(false)}>
           <h2 className="font-display text-xl font-semibold">Settings</h2>
-          <button
-            type="button"
-            onClick={() => setMuted(!muted)}
-            className="mt-4 flex min-h-11 w-full items-center gap-2 rounded-lg border border-border px-3 text-sm"
-          >
-            {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
-            Sound {muted ? "off" : "on"}
-          </button>
+          <AudioSettings className="mt-4" muted={muted} setMuted={setMuted} />
           <GraphicsToggle className="mt-4" />
           <AimAssistToggle className="mt-4" />
           <p className="mt-4 text-xs text-muted">
             Desktop: WASD move, mouse aims, auto-fire, Space for skill. Phone: left thumb moves, right thumb aims, Skill button above the aim stick.
           </p>
-          <button type="button" onClick={() => setSettings(false)} className="mt-4 min-h-11 w-full rounded-lg bg-accent font-bold text-accent-fg">
+          <button type="button" data-sfx="back" onClick={() => setSettings(false)} className="mt-4 min-h-11 w-full rounded-lg bg-accent font-bold text-accent-fg">
             Done
           </button>
         </Modal>

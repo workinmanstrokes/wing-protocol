@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Combat } from "@/game/combat";
 import { MECH_MAP, PERK_MAP } from "@/game/data";
-import { GameAudio } from "@/game/audio";
+import { gameAudio } from "@/game/audio";
 import { GameInput } from "@/game/input";
 import {
   doubleExtractLoot,
@@ -33,7 +33,7 @@ import type { HudState, MechId, PerkId, RunResult } from "@/game/types";
 import { MainMenu, type MenuTab } from "@/components/menu/main-menu";
 import { MenuBackground } from "@/components/menu/menu-bg";
 import type { StartSpec } from "@/components/menu/play-tab";
-import { AimAssistToggle, GraphicsToggle } from "@/components/menu/settings";
+import { AimAssistToggle, AudioSettings, GraphicsToggle } from "@/components/menu/settings";
 import { Eyebrow, RewardLine, rarityClass, useSave } from "@/components/menu/shared";
 
 type Screen = "menu" | "combat" | "results" | "tower";
@@ -81,13 +81,39 @@ export function GameApp() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const combatRef = useRef<Combat | null>(null);
   const inputRef = useRef(new GameInput());
-  const audioRef = useRef(new GameAudio());
+  const audioRef = useRef(gameAudio);
   const runRef = useRef(run);
   runRef.current = run;
 
+  // Saved audio prefs; first tap/key anywhere unlocks WebAudio (mobile autoplay rules).
+  const prefsRead = useRef(false);
   useEffect(() => {
+    if (!prefsRead.current) {
+      prefsRead.current = true;
+      const saved = audioRef.current.getPrefs().muted;
+      if (saved !== muted) {
+        setMuted(saved);
+        return;
+      }
+    }
     audioRef.current.setMuted(muted);
   }, [muted]);
+  useEffect(() => audioRef.current.installUnlock(), []);
+  const paused = !!hud?.paused || !!choices;
+  useEffect(() => {
+    audioRef.current.setScene(screen === "combat" ? "combat" : "menu", screen === "combat" && paused);
+  }, [screen, paused]);
+  // UI clicks: one listener for every menu button (data-sfx="back" | "none" to override).
+  const onUiClick = (e: React.MouseEvent) => {
+    const el = (e.target as HTMLElement).closest?.("button, [role=tab], [role=radio]") as HTMLElement | null;
+    if (!el || (el as HTMLButtonElement).disabled) return;
+    if (screen === "combat" && !paused) return; // in-fight controls have their own sounds
+    const kind = el.dataset.sfx;
+    if (kind === "none") return;
+    audioRef.current.unlock();
+    if (kind === "back" || /close|back/i.test(el.getAttribute("aria-label") ?? "")) audioRef.current.ui("back");
+    else setTimeout(() => audioRef.current.ui("click"), 0);
+  };
 
   // Web portals (no-op elsewhere): loading done once the menu is up; gameplay = live, unpaused combat.
   useEffect(() => {
@@ -203,6 +229,7 @@ export function GameApp() {
 
   const launch = (next: Run) => {
     audioRef.current.unlock();
+    audioRef.current.ui("confirm");
     setHud(null);
     setChoices(null);
     setOutcome(null);
@@ -230,7 +257,7 @@ export function GameApp() {
   };
 
   return (
-    <div className="safe-area relative h-dvh w-full overflow-hidden bg-bg font-sans text-fg">
+    <div className="safe-area relative h-dvh w-full overflow-hidden bg-bg font-sans text-fg" onClickCapture={onUiClick}>
       {screen === "menu" && <MainMenu tab={tab} setTab={setTab} muted={muted} setMuted={setMuted} onStart={start} />}
       {screen === "combat" && (
         <div
@@ -263,6 +290,8 @@ export function GameApp() {
           )}
           {hud?.paused && !choices && (
             <PauseMenu
+              muted={muted}
+              setMuted={setMuted}
               onResume={() => combatRef.current?.pause(false)}
               onQuit={() => {
                 combatRef.current?.destroy();
@@ -561,13 +590,24 @@ function LevelUp({ choices, onPick }: { choices: PerkId[]; onPick: (id: PerkId) 
   );
 }
 
-function PauseMenu({ onResume, onQuit }: { onResume: () => void; onQuit: () => void }) {
+function PauseMenu({
+  onResume,
+  onQuit,
+  muted,
+  setMuted,
+}: {
+  onResume: () => void;
+  onQuit: () => void;
+  muted: boolean;
+  setMuted: (v: boolean) => void;
+}) {
   return (
     <div className="absolute inset-0 z-10 grid place-items-center bg-bg/70 p-4">
-      <div className="w-full max-w-sm rounded-xl border border-border bg-surface p-6">
+      <div className="max-h-full w-full max-w-sm overflow-y-auto rounded-xl border border-border bg-surface p-6">
         <h2 className="font-display text-2xl font-semibold">Paused</h2>
         <p className="mt-2 text-sm text-muted">The horde holds. Aborting ends this run.</p>
-        <GraphicsToggle className="mt-5" />
+        <AudioSettings className="mt-5" muted={muted} setMuted={setMuted} />
+        <GraphicsToggle className="mt-4" />
         <AimAssistToggle className="mt-4" />
         <div className="mt-5 flex flex-col gap-2">
           <Button onClick={onResume}>Resume</Button>
