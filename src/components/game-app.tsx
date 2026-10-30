@@ -18,7 +18,7 @@ import {
 } from "@/game/save";
 import { bossRushConfig, eliteConfig, sortieConfig, type RunConfig } from "@/game/meta/modes";
 import { canDoubleExtract } from "@/game/meta/extract";
-import { showRewardedAd } from "@/game/meta/ads";
+import { rewardedAdAvailable, showRewardedAd } from "@/game/meta/ads";
 import { portalCommercialBreak, portalGameplay, portalLoadingFinished } from "@/game/portal";
 import {
   isBossFloor,
@@ -659,7 +659,7 @@ function Results({ outcome, onMenu, onAgain }: { outcome: Outcome; onMenu: () =>
             </p>
           )}
         </div>
-        {offer2x && (
+        {offer2x && rewardedAdAvailable() && (
           <div className="mt-3 rounded-lg border border-legend/50 bg-elevated p-3">
             <button
               type="button"
@@ -667,7 +667,7 @@ function Results({ outcome, onMenu, onAgain }: { outcome: Outcome; onMenu: () =>
               disabled={adsLeft <= 0 || ad === "playing"}
               onClick={async () => {
                 setAd("playing");
-                const ok = await showRewardedAd(3);
+                const ok = await showRewardedAd();
                 const extra = ok ? doubleExtractLoot(result) : null;
                 setBonus(extra);
                 setAd(extra ? "idle" : "failed");
