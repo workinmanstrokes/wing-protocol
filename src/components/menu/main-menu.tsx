@@ -8,7 +8,7 @@ import { PlayTab, type StartSpec } from "./play-tab";
 import { HangarTab } from "./hangar-tab";
 import { StoreTab } from "./store-tab";
 import { PilotsTab } from "./pilots-tab";
-import { GraphicsToggle } from "./settings";
+import { AimAssistToggle, GraphicsToggle } from "./settings";
 import { Modal, useSave } from "./shared";
 
 export type MenuTab = "play" | "hangar" | "store" | "pilots";
@@ -111,8 +111,9 @@ export function MainMenu({
             Sound {muted ? "off" : "on"}
           </button>
           <GraphicsToggle className="mt-4" />
+          <AimAssistToggle className="mt-4" />
           <p className="mt-4 text-xs text-muted">
-            Desktop: WASD move, mouse aims, auto-fire, Space for skill. Phone: left thumb moves, Skill button bottom right.
+            Desktop: WASD move, mouse aims, auto-fire, Space for skill. Phone: left thumb moves, right thumb aims, Skill button above the aim stick.
           </p>
           <button type="button" onClick={() => setSettings(false)} className="mt-4 min-h-11 w-full rounded-lg bg-accent font-bold text-accent-fg">
             Done

@@ -33,7 +33,7 @@ import type { HudState, MechId, PerkId, RunResult } from "@/game/types";
 import { MainMenu, type MenuTab } from "@/components/menu/main-menu";
 import { MenuBackground } from "@/components/menu/menu-bg";
 import type { StartSpec } from "@/components/menu/play-tab";
-import { GraphicsToggle } from "@/components/menu/settings";
+import { AimAssistToggle, GraphicsToggle } from "@/components/menu/settings";
 import { Eyebrow, RewardLine, rarityClass, useSave } from "@/components/menu/shared";
 
 type Screen = "menu" | "combat" | "results" | "tower";
@@ -437,62 +437,91 @@ function HudOverlay({
   );
 }
 
-function TouchPad({ input }: { input: GameInput }) {
+function TouchStick({
+  side,
+  onMove,
+  label,
+}: {
+  side: "left" | "right";
+  onMove: (x: number, y: number) => void;
+  label: string;
+}) {
   const origin = useRef<{ x: number; y: number; id: number } | null>(null);
   const knobRef = useRef<HTMLDivElement>(null);
   const RADIUS = 40;
+  const REACH = side === "left" ? 56 : 48;
 
   const setKnob = (nx: number, ny: number) => {
     if (knobRef.current) {
       knobRef.current.style.transform = `translate(${nx * RADIUS}px, ${ny * RADIUS}px)`;
     }
   };
+  const release = () => {
+    origin.current = null;
+    onMove(0, 0);
+    setKnob(0, 0);
+  };
 
   return (
     <>
       {/* Generous invisible catch-zone: thumb can land anywhere here, not just on the graphic. */}
       <div
-        className="absolute bottom-0 left-0 h-[42%] w-[48%] touch-none sm:hidden"
+        data-testid={`touch-${side}`}
+        className={cn("absolute bottom-0 h-[42%] w-[48%] touch-none sm:hidden", side === "left" ? "left-0" : "right-0")}
         onPointerDown={(e) => {
           (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
           origin.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
         }}
         onPointerMove={(e) => {
           if (!origin.current || origin.current.id !== e.pointerId) return;
-          const dx = (e.clientX - origin.current.x) / 56;
-          const dy = (e.clientY - origin.current.y) / 56;
-          const nx = Math.max(-1, Math.min(1, dx));
-          const ny = Math.max(-1, Math.min(1, dy));
-          input.setLeftStick(nx, ny);
+          let nx = (e.clientX - origin.current.x) / REACH;
+          let ny = (e.clientY - origin.current.y) / REACH;
+          const m = Math.hypot(nx, ny);
+          if (m > 1) {
+            nx /= m;
+            ny /= m;
+          }
+          onMove(nx, ny);
           setKnob(nx, ny);
         }}
-        onPointerUp={() => {
-          origin.current = null;
-          input.setLeftStick(0, 0);
-          setKnob(0, 0);
-        }}
-        onPointerCancel={() => {
-          origin.current = null;
-          input.setLeftStick(0, 0);
-          setKnob(0, 0);
-        }}
+        onPointerUp={release}
+        onPointerCancel={release}
       />
-      {/* Visible joystick — a fixed anchor showing current stick direction. */}
+      {/* Visible joystick: a fixed anchor showing current stick direction. */}
       <div
-        className="pointer-events-none absolute bottom-7 left-7 grid size-24 place-items-center rounded-full border border-border/60 bg-surface/35 sm:hidden"
+        className={cn(
+          "pointer-events-none absolute bottom-7 grid size-24 place-items-center rounded-full border border-border/60 bg-surface/35 sm:hidden",
+          side === "left" ? "left-7" : "right-7",
+        )}
         aria-hidden="true"
       >
         <div className="pointer-events-none absolute size-2 rounded-full bg-muted/50" />
+        <span className="pointer-events-none absolute -top-5 font-display text-[10px] font-semibold uppercase tracking-wider text-muted/80">
+          {label}
+        </span>
         <div
           ref={knobRef}
-          className="pointer-events-none size-11 rounded-full border border-accent/70 bg-elevated/90 shadow-lg"
+          className={cn(
+            "pointer-events-none size-11 rounded-full border bg-elevated/90 shadow-lg",
+            side === "left" ? "border-accent/70" : "border-legend/70",
+          )}
         />
       </div>
+    </>
+  );
+}
+
+function TouchPad({ input }: { input: GameInput }) {
+  return (
+    <>
+      <TouchStick side="left" label="Move" onMove={(x, y) => input.setLeftStick(x, y)} />
+      <TouchStick side="right" label="Aim" onMove={(x, y) => input.setRightStick(x, y)} />
       <button
         type="button"
-        className="absolute bottom-6 right-5 grid size-16 place-items-center rounded-full border border-border bg-surface/80 font-display text-[11px] font-semibold uppercase tracking-wider sm:hidden"
+        className="absolute bottom-[calc(42%+0.5rem)] right-5 grid size-16 place-items-center rounded-full border border-border bg-surface/80 font-display text-[11px] font-semibold uppercase tracking-wider sm:hidden"
         onPointerDown={(e) => {
           e.preventDefault();
+          e.stopPropagation();
           input.skillTap = true;
         }}
       >
@@ -539,6 +568,7 @@ function PauseMenu({ onResume, onQuit }: { onResume: () => void; onQuit: () => v
         <h2 className="font-display text-2xl font-semibold">Paused</h2>
         <p className="mt-2 text-sm text-muted">The horde holds. Aborting ends this run.</p>
         <GraphicsToggle className="mt-5" />
+        <AimAssistToggle className="mt-4" />
         <div className="mt-5 flex flex-col gap-2">
           <Button onClick={onResume}>Resume</Button>
           <Button variant="secondary" onClick={onQuit}>
