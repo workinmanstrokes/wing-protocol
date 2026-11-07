@@ -1,23 +1,82 @@
+import { Capacitor } from "@capacitor/core";
 import { isPortal, portalRewarded } from "../portal";
+import { ADMOB } from "./ad-config";
 
 /**
- * Rewarded-ad STUB. No ad SDK and no ad unit IDs are bundled: the Sponsor
- * Crate shows a short placeholder "test ad" countdown in the UI and then
- * grants the reward. Swapping in AdMob later means replacing this function
- * (release builds only, real IDs from CI secrets — never committed).
+ * Rewarded ads.
+ * - Android app: Google AdMob rewarded video, behind Google's UMP consent form.
+ * - Web portals (Poki / CrazyGames): the portal's own rewarded video (unchanged).
+ * - Plain web: no ad network, so rewarded rewards are unavailable.
+ * The reward is granted ONLY when the network reports it was earned.
  */
-export const ADS_MODE: "stub" | "test" | "live" = "stub";
+const isNativeAndroid = Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
+
+export type AdResult = "rewarded" | "skipped" | "unavailable";
 
 export function rewardedAdAvailable(): boolean {
-  return true;
+  return isPortal || isNativeAndroid;
 }
 
-/**
- * Resolves true when the ad finished and the reward was earned. On a web
- * portal (Poki / CrazyGames build) this is the portal's rewarded video;
- * otherwise the placeholder countdown.
- */
-export function showRewardedAd(seconds = 3): Promise<boolean> {
-  if (isPortal) return portalRewarded();
-  return new Promise((resolve) => setTimeout(() => resolve(true), seconds * 1000));
+let ready: Promise<boolean> | null = null;
+
+/** Init AdMob + UMP consent once. Resolves whether ads may be requested. */
+export function initAds(): Promise<boolean> {
+  if (!isNativeAndroid) return Promise.resolve(false);
+  ready ??= (async () => {
+    try {
+      const { AdMob, AdmobConsentStatus } = await import("@capacitor-community/admob");
+      await AdMob.initialize({ initializeForTesting: ADMOB.useTestIds });
+      let info = await AdMob.requestConsentInfo();
+      if (info.isConsentFormAvailable && info.status === AdmobConsentStatus.REQUIRED) {
+        info = await AdMob.showConsentForm();
+      }
+      return info.canRequestAds;
+    } catch {
+      ready = null; // retry on next attempt
+      return false;
+    }
+  })();
+  return ready;
+}
+
+/** Re-open the UMP privacy options form (for users in consent regions). */
+export async function showAdPrivacyOptions(): Promise<void> {
+  if (!isNativeAndroid) return;
+  const { AdMob } = await import("@capacitor-community/admob");
+  await AdMob.showPrivacyOptionsForm().catch(() => {});
+}
+
+async function admobRewarded(): Promise<AdResult> {
+  if (!(await initAds())) return "unavailable";
+  const { AdMob, RewardAdPluginEvents } = await import("@capacitor-community/admob");
+  let earned = false;
+  const sub = await AdMob.addListener(RewardAdPluginEvents.Rewarded, () => {
+    earned = true;
+  });
+  try {
+    await AdMob.prepareRewardVideoAd({ adId: ADMOB.rewardedUnitId, isTesting: ADMOB.useTestIds });
+  } catch {
+    await sub.remove();
+    return "unavailable";
+  }
+  try {
+    await AdMob.showRewardVideoAd();
+  } catch {
+    await sub.remove();
+    return "unavailable";
+  }
+  await sub.remove();
+  return earned ? "rewarded" : "skipped";
+}
+
+/** Full result, for UIs that explain why no reward was given. */
+export async function playRewardedAd(): Promise<AdResult> {
+  if (isPortal) return (await portalRewarded()) ? "rewarded" : "skipped";
+  if (isNativeAndroid) return admobRewarded();
+  return "unavailable";
+}
+
+/** Resolves true only when the ad finished and the reward was earned. */
+export async function showRewardedAd(): Promise<boolean> {
+  return (await playRewardedAd()) === "rewarded";
 }

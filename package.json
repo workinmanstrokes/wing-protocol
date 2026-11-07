@@ -30,6 +30,7 @@
     "portal:crazygames": "BUILD_TARGET=capacitor VITE_PORTAL=1 vite build --base ./ && node scripts/build-portal.mjs crazygames --zip /workspace/out/crazygames/wing-protocol"
   },
   "dependencies": {
+    "@capacitor-community/admob": "^8.2.1",
     "@capacitor/android": "^8.5.3",
     "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.5.3",

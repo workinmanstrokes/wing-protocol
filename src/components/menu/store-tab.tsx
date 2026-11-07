@@ -20,7 +20,7 @@ import {
   type VaultResult,
 } from "@/game/meta/crates";
 import { dayKey } from "@/game/meta/missions";
-import { showRewardedAd } from "@/game/meta/ads";
+import { playRewardedAd, rewardedAdAvailable, showAdPrivacyOptions, type AdResult } from "@/game/meta/ads";
 import { Eyebrow, GearCard, MechPortrait, Modal, rarityClass, useSave } from "./shared";
 
 type Reveal = { kind: "gear"; drop: GearDrop; bonus?: number } | { kind: "mech"; mech: VaultResult & { kind: "mech" } };
@@ -47,6 +47,8 @@ export function StoreTab() {
   const now = useNow();
   const [reveal, setReveal] = useState<Reveal | null>(null);
   const [adPlaying, setAdPlaying] = useState(false);
+  const [adNote, setAdNote] = useState<AdResult | null>(null);
+  const adsSupported = rewardedAdAvailable();
 
   const buy = (id: CrateDef["id"], pay: CratePay) => {
     const d = openCrate(id, pay);
@@ -84,22 +86,36 @@ export function StoreTab() {
               <PlayCircle className="size-4 text-muted" />
               <h3 className="font-display text-base font-semibold">{CRATES.ad.name}</h3>
             </div>
-            <p className="mt-0.5 text-[11px] text-muted">Optional. {adsLeft}/3 left today.</p>
+            <p className="mt-0.5 text-[11px] text-muted">
+              {adsSupported ? `Optional. ${adsLeft}/3 left today.` : "Available in the Android app."}
+            </p>
             <OddsList odds={CRATES.ad.odds} />
             <button
               type="button"
               data-testid="open-ad"
-              disabled={adsLeft <= 0 || adPlaying}
+              disabled={!adsSupported || adsLeft <= 0 || adPlaying}
               onClick={async () => {
+                setAdNote(null);
                 setAdPlaying(true);
-                const ok = await showRewardedAd(3);
+                const r = await playRewardedAd();
                 setAdPlaying(false);
-                if (ok) buy("ad", "ad");
+                if (r === "rewarded") buy("ad", "ad");
+                else setAdNote(r);
               }}
               className="mt-2 min-h-11 w-full rounded-lg border border-border bg-elevated text-sm font-semibold disabled:opacity-40"
             >
-              {adsLeft > 0 ? "Watch ad" : "Back tomorrow"}
+              {adPlaying ? "Loading ad…" : !adsSupported ? "App only" : adsLeft > 0 ? "Watch ad" : "Back tomorrow"}
             </button>
+            {adNote && (
+              <p className="mt-1 text-center text-[11px] text-muted" role="status" data-testid="ad-note">
+                {adNote === "skipped" ? "Ad closed early. No crate this time." : "No ad available right now. Try again shortly."}
+              </p>
+            )}
+            {adsSupported && (
+              <button type="button" onClick={() => void showAdPrivacyOptions()} className="mt-1 w-full text-center text-[10px] text-muted underline underline-offset-2">
+                Ad privacy choices
+              </button>
+            )}
           </div>
         </div>
 
@@ -209,8 +225,8 @@ export function StoreTab() {
 
       {adPlaying && (
         <Modal label="Sponsor ad">
-          <p className="text-center font-display text-lg font-semibold">Test ad</p>
-          <p className="mt-1 text-center text-xs text-muted">Placeholder only. No real ads in this build.</p>
+          <p className="text-center font-display text-lg font-semibold">Loading sponsor</p>
+          <p className="mt-1 text-center text-xs text-muted">Watch to the end to earn your Sponsor Crate.</p>
           <div className="mx-auto mt-4 size-10 animate-spin rounded-full border-2 border-border border-t-accent" />
         </Modal>
       )}
