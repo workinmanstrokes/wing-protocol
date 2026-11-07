@@ -70,6 +70,8 @@ export interface MechDef {
   };
   weapon: WeaponKind;
   skill: { name: string; cooldown: number; desc: string };
+  /** Always-on playstyle. Not a second button. */
+  passive: { name: string; desc: string };
   handling: { accel: number; brake: number; weave?: number };
 }
 

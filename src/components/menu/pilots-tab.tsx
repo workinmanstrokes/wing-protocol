@@ -34,8 +34,12 @@ export function PilotsTab({ onVault }: { onVault: () => void }) {
                 </p>
               )}
               <p className="mt-2 text-sm leading-relaxed text-muted">{m.blurb}</p>
-              <p className="mt-2 text-sm">
-                <span className="font-semibold">{m.skill.name}.</span> <span className="text-muted">{m.skill.desc}</span>
+              <p className="mt-2 text-sm" data-testid="skill-desc">
+                <span className="font-semibold">{m.skill.name}</span>
+                <span className="text-muted"> · {m.skill.cooldown}s. {m.skill.desc}</span>
+              </p>
+              <p className="mt-1 text-sm" data-testid="passive-desc">
+                <span className="font-semibold">{m.passive.name}.</span> <span className="text-muted">{m.passive.desc}</span>
               </p>
               <dl className="mt-3 grid grid-cols-5 gap-2 text-xs">
                 {(

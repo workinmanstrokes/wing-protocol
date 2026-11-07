@@ -48,6 +48,9 @@ export function HangarTab() {
           <div className="min-w-0 flex-1">
             <Eyebrow>{mech.role}</Eyebrow>
             <h2 className="font-display text-2xl font-semibold leading-tight">{mech.name}</h2>
+            <p className="mt-1 text-xs text-muted">
+              <span className="text-fg">{mech.skill.name}</span> · {mech.skill.cooldown}s · {mech.passive.name}
+            </p>
             <dl className="mt-2 grid grid-cols-3 gap-x-3 gap-y-1 text-xs" data-testid="mech-stats">
               <StatDelta label="Hull" a={base.hp} b={geared.hp} />
               <StatDelta label="Damage" a={base.dmg} b={geared.dmg} digits={1} />

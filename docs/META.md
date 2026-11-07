@@ -91,11 +91,13 @@ The 8 credit mechs (Aether Wing, Heavy Forge, Night Scythe, Dune Shield, Jade Se
 - **Enemies:** grunts have hex heads with three eyes in a triangle, squared shoulders and ribbed back plates. The Ace is a black-and-gold squad leader. The Titan has a triple sensor cluster.
 - See `docs/mech-lineup.png`.
 
+The current roster, silhouettes, passives, and cooldowns are in `docs/mech-roster.md`. Suits are drawn by `drawLineup` so the hangar portrait matches the combat sprite.
+
 | Mech | Pilot | Role | Look | Weapon | Skill |
 |---|---|---|---|---|---|
-| **Lantern Moth** | Lumen | Controller | Teardrop dust-wings with eye-spots, feathery antennae, glowing lantern abdomen | Light motes: slow, strongly homing, 3+ per volley | **Lure Lamp**: a lamp ahead pulls nearby non-boss hostiles in for 3 s, then bursts (5× damage, 150 radius) |
-| **Kiln Tortoise** | Cinder | Juggernaut | Hex-plated furnace dome on four stub legs, chimney, ember-grate snout | Ember spray: short cone of embers that pop in small bursts | **Molten Shell**: 3.5 s invulnerable, scorching everything within 100 every 0.25 s |
-| **Tether Kite** | Vesper | Skirmisher | Diamond sail with cross spars, ribbon tail with bows, tethered wingtip blades | Tether blades: fly out and snap back, piercing both ways | **Afterimage**: three decoy images that auto-fire for 4 s |
+| **Lantern Moth** | Lumen | Controller | Four separate wing panels and a lantern abdomen | Light motes: slow, strongly homing | **Lure Lamp** (11s): a local lamp pulls non-bosses for 2.6s, then a small burst. Passive **Dust Wake** slows hulls behind you |
+| **Kiln Tortoise** | Cinder | Juggernaut | Low dome, four stub legs, grate snout | Ember spray: short cone | **Kiln Seal** (13s): 2.1s invulnerable, slowed, close scorch. Passive **Thorns** splashes damage you take |
+| **Tether Kite** | Vesper | Skirmisher | Diamond sail, cross spars, long ribbon | Tether blades: fly out and snap back | **Ribbon Line** (8s): a dash that leaves a damaging line. Passive **Slipstream** shortens the fire interval near top speed |
 
 Their base stats are in `MECHS` in `src/game/data.ts`.
 

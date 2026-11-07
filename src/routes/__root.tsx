@@ -35,7 +35,6 @@ export const Route = createRootRoute({
       },
       ...(PORTAL ? [] : [{ property: "og:image", content: "https://wp2-pi.vercel.app/og.jpg" }]),
     ],
-    scripts: [{ src: "/telemetry.js", defer: true }],
     links: [
       { rel: "icon", type: "image/svg+xml", href: `${BASE}favicon.svg` },
       { rel: "stylesheet", href: appCss },
@@ -50,7 +49,10 @@ export const Route = createRootRoute({
           ]),
     ],
     // iOS/PWA helper (offline service worker, WebAudio unlock on first tap, no zoom/rubber-band). Production only.
-    scripts: import.meta.env.PROD && !PORTAL ? [{ src: `${BASE}ios.js` }] : [],
+    scripts: [
+      { src: "/telemetry.js", defer: true },
+      ...(import.meta.env.PROD && !PORTAL ? [{ src: `${BASE}ios.js` }] : []),
+    ],
   }),
   component: () => (
     <html lang="en" suppressHydrationWarning>

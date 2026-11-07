@@ -1,0 +1,296 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "errors": [],
+  "suits": [
+    {
+      "id": "aether",
+      "touch": {
+        "ok": true,
+        "mid": {
+          "speed": 193.6553344278145,
+          "aim": {
+            "aim": -0.6747409401934266,
+            "fire": -0.6747409401934266,
+            "manual": true,
+            "screen": {
+              "x": 181.1059439097478,
+              "y": 473.84770515696755
+            }
+          },
+          "skillCd": 0
+        },
+        "after": {
+          "time": 1.5166666666666662,
+          "hp": 92,
+          "kills": 0,
+          "level": 1,
+          "sector": 0,
+          "mobs": 1,
+          "bosses": 0,
+          "evo": [],
+          "uplinks": 0,
+          "over": false,
+          "quality": "high",
+          "fps": 60,
+          "leveling": false,
+          "paused": false,
+          "hitstop": 0,
+          "skillCd": 8.149999999999983,
+          "skillMax": 8.5,
+          "mech": "aether",
+          "maxHp": 92,
+          "screen": {
+            "x": 174.33947122177756,
+            "y": 482.5284930594994
+          }
+        },
+        "cooledBy": 0.62
+      }
+    },
+    {
+      "id": "dune",
+      "touch": {
+        "ok": true,
+        "mid": {
+          "speed": 134.77520198574118,
+          "aim": {
+            "aim": -0.6747409401934266,
+            "fire": -0.6747409401934266,
+            "manual": true,
+            "screen": {
+              "x": 179.3132956228003,
+              "y": 474.4146005809746
+            }
+          },
+          "skillCd": 0
+        },
+        "after": {
+          "time": 1.4666666666666663,
+          "hp": 168,
+          "kills": 0,
+          "level": 1,
+          "sector": 0,
+          "mobs": 1,
+          "bosses": 0,
+          "evo": [],
+          "uplinks": 0,
+          "over": false,
+          "quality": "high",
+          "fps": 60,
+          "leveling": false,
+          "paused": false,
+          "hitstop": 0,
+          "skillCd": 12.649999999999983,
+          "skillMax": 13,
+          "mech": "dune",
+          "maxHp": 168,
+          "screen": {
+            "x": 173.8114171587206,
+            "y": 482.751403851501
+          }
+        },
+        "cooledBy": 0.62
+      }
+    },
+    {
+      "id": "scythe",
+      "touch": {
+        "ok": true,
+        "mid": {
+          "speed": 196.60572451964362,
+          "aim": {
+            "aim": -0.6747409401934266,
+            "fire": -0.6747409401934266,
+            "manual": true,
+            "screen": {
+              "x": 180.42605688865774,
+              "y": 474.4461226844751
+            }
+          },
+          "skillCd": 0
+        },
+        "after": {
+          "time": 1.5333333333333328,
+          "hp": 110,
+          "kills": 0,
+          "level": 1,
+          "sector": 0,
+          "mobs": 1,
+          "bosses": 0,
+          "evo": [],
+          "uplinks": 0,
+          "over": false,
+          "quality": "high",
+          "fps": 60,
+          "leveling": false,
+          "paused": false,
+          "hitstop": 0,
+          "skillCd": 6.150000000000001,
+          "skillMax": 6.5,
+          "mech": "scythe",
+          "maxHp": 110,
+          "screen": {
+            "x": 190.57960683977763,
+            "y": 469.0039578888661
+          }
+        },
+        "cooledBy": 0.62
+      }
+    },
+    {
+      "id": "storm",
+      "touch": {
+        "ok": true,
+        "mid": {
+          "speed": 161.06392272250574,
+          "aim": {
+            "aim": -0.6747409401934266,
+            "fire": -0.6747409401934266,
+            "manual": true,
+            "screen": {
+              "x": 180.2769454998695,
+              "y": 474.03707823686636
+            }
+          },
+          "skillCd": 0
+        },
+        "after": {
+          "time": 1.5833333333333326,
+          "hp": 104,
+          "kills": 0,
+          "level": 1,
+          "sector": 0,
+          "mobs": 1,
+          "bosses": 0,
+          "evo": [],
+          "uplinks": 0,
+          "over": false,
+          "quality": "high",
+          "fps": 60,
+          "leveling": false,
+          "paused": false,
+          "hitstop": 0,
+          "skillCd": 10.649999999999983,
+          "skillMax": 11,
+          "mech": "storm",
+          "maxHp": 104,
+          "screen": {
+            "x": 174.00263931909876,
+            "y": 482.6886775173093
+          }
+        },
+        "cooledBy": 0.62
+      }
+    },
+    {
+      "id": "kite",
+      "touch": {
+        "ok": true,
+        "mid": {
+          "speed": 210.88587776545478,
+          "aim": {
+            "aim": -0.6747409401934266,
+            "fire": -0.6747409401934266,
+            "manual": true,
+            "screen": {
+              "x": 181.45912467803896,
+              "y": 473.7982433386801
+            }
+          },
+          "skillCd": 0
+        },
+        "after": {
+          "time": 1.4499999999999997,
+          "hp": 96,
+          "kills": 0,
+          "level": 1,
+          "sector": 0,
+          "mobs": 1,
+          "bosses": 0,
+          "evo": [],
+          "uplinks": 0,
+          "over": false,
+          "quality": "high",
+          "fps": 60,
+          "leveling": false,
+          "paused": false,
+          "hitstop": 0,
+          "skillCd": 7.650000000000001,
+          "skillMax": 8,
+          "mech": "kite",
+          "maxHp": 96,
+          "screen": {
+            "x": 189.62754588308167,
+            "y": 469.89956378202805
+          }
+        },
+        "cooledBy": 0.62
+      }
+    },
+    {
+      "id": "kiln",
+      "touch": {
+        "ok": true,
+        "mid": {
+          "speed": 111.66218242914813,
+          "aim": {
+            "aim": -0.6747409401934266,
+            "fire": -0.6747409401934266,
+            "manual": true,
+            "screen": {
+              "x": 178.02268932865513,
+              "y": 475.20909018575844
+            }
+          },
+          "skillCd": 0
+        },
+        "after": {
+          "time": 1.4666666666666663,
+          "hp": 196,
+          "kills": 0,
+          "level": 1,
+          "sector": 0,
+          "mobs": 1,
+          "bosses": 0,
+          "evo": [],
+          "uplinks": 0,
+          "over": false,
+          "quality": "high",
+          "fps": 60,
+          "leveling": false,
+          "paused": false,
+          "hitstop": 0,
+          "skillCd": 12.649999999999983,
+          "skillMax": 13,
+          "mech": "kiln",
+          "maxHp": 196,
+          "screen": {
+            "x": 174.19011668891903,
+            "y": 482.5963625853317
+          }
+        },
+        "cooledBy": 0.62
+      }
+    }
+  ],
+  "save": {
+    "version": 1,
+    "credits": 1337,
+    "selected": "scythe",
+    "unlocked": [
+      "aether",
+      "forge",
+      "scythe"
+    ],
+    "gearName": "Gundam Weave",
+    "slot": "armor"
+  },
+  "retry": {
+    "skillCdAfterSpace": 8.249999999999988,
+    "redeployed": true
+  },
+  "aetherCopy": {
+    "copy": "Needle Lance · 8.5s. Fires one thin beam down your aim line. It pierces the whole pack and does not splash.",
+    "passive": "Glass Optics. Weapon yield +12%. You take 8% more hull damage."
+  }
+}
