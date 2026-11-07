@@ -3,7 +3,17 @@ import { GameAudio } from "./audio";
 import { GameInput } from "./input";
 import { angleDiff, applyAimAssist, getAimAssistPref, smoothAim } from "./aim";
 import { drawEnemyTop, drawMechTop, drawObstacle, drawPickup } from "./sprites";
-import { MECH_BOOSTERS } from "./mecha";
+import { MECH_BOOSTERS, enemyRim } from "./mecha";
+import {
+  ABILITY,
+  aegisBlocks,
+  distToSegment,
+  fireIntervalMul,
+  inWake,
+  incomingDamageMul,
+  moveMul,
+  weaponDamageMul,
+} from "./abilities";
 import { mechArtVersion } from "./mech-art";
 import { PACE_EVENTS, paceMultiplier, sectorLayout, type ObstacleKind } from "./levels";
 import type { GearItem, HudState, MechId, PerkId, RunResult } from "./types";
@@ -80,6 +90,25 @@ type Mob = {
   shieldMax: number;
   aimX: number;
   aimY: number;
+  venom: number;
+  venomDps: number;
+  venomAcc: number;
+};
+
+type ZoneKind = "net" | "mine" | "ribbon" | "scorch";
+type Zone = {
+  alive: boolean;
+  kind: ZoneKind;
+  x: number;
+  y: number;
+  x2: number;
+  y2: number;
+  r: number;
+  t: number;
+  tick: number;
+  dmg: number;
+  color: string;
+  arm: number;
 };
 
 type Hazard = { alive: boolean; x: number; y: number; r: number; t: number; max: number; dmg: number; color: string };
@@ -320,6 +349,7 @@ export class Combat {
     speed: 40, baseSpeed: 40, dmg: 8, xp: 1, fireCd: 0, flash: 0, boss: false, touchCd: 0,
     special: 0, telegraph: 0, dashT: 0, dashDX: 0, dashDY: 0,
     elite: "", phase: 0, shieldHp: 0, shieldMax: 0, aimX: 0, aimY: 0,
+    venom: 0, venomDps: 0, venomAcc: 0,
   }));
   private picks: Pick[] = pool(MAX_PICK, () => ({
     alive: false,
@@ -381,10 +411,23 @@ export class Combat {
   private bossKills = 0;
   private bossQueue = 0;
   private bossWait = 0;
-  private lure = { t: 0, x: 0, y: 0 };
+  private lure = { t: 0, x: 0, y: 0, r: 0 };
   private moltenT = 0;
   private moltenTick = 0;
   private decoys: { x: number; y: number; t: number; cd: number }[] = [];
+  private tempoT = 0;
+  private bulwarkT = 0;
+  private bulwarkReady = true;
+  private braceT = 0;
+  private rootT = 0;
+  private wardT = 0;
+  private sinceHit = 99;
+  private capHits = 0;
+  private aegisT = 0;
+  private aegisAng = 0;
+  private zones: Zone[] = pool(24, () => ({
+    alive: false, kind: "net", x: 0, y: 0, x2: 0, y2: 0, r: 40, t: 0, tick: 0, dmg: 0, color: "#fff", arm: 0,
+  }));
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -504,15 +547,16 @@ export class Combat {
         const dx = this.lure.x - m.x;
         const dy = this.lure.y - m.y;
         const d = Math.hypot(dx, dy);
-        if (d < 320 && d > 6) {
-          m.x += (dx / d) * 150 * dt;
-          m.y += (dy / d) * 150 * dt;
+        const reach = this.lure.r || ABILITY.moth.lureR;
+        if (d < reach && d > 6) {
+          m.x += (dx / d) * 130 * dt;
+          m.y += (dy / d) * 130 * dt;
         }
       }
       if (this.lure.t <= 0) {
-        this.hurtCircle(this.lure.x, this.lure.y, 150, stats.dmg * 5, true);
-        this.spawnRing(this.lure.x, this.lure.y, 150, 0.45, "#ffb347", 5);
-        this.explodeFx(this.lure.x, this.lure.y, 110, "#ffb347");
+        const burst = ABILITY.moth.lureBurst;
+        this.hurtCircle(this.lure.x, this.lure.y, burst, stats.dmg * ABILITY.moth.lureDmg, false);
+        this.spawnRing(this.lure.x, this.lure.y, burst * 0.7, 0.22, "#ffb347", 2);
         this.audio.slam();
       }
     }
@@ -520,9 +564,9 @@ export class Combat {
       this.moltenT -= dt;
       this.moltenTick -= dt;
       if (this.moltenTick <= 0) {
-        this.moltenTick = 0.25;
-        this.hurtCircle(this.px, this.py, 100, stats.dmg * 1.1, false);
-        this.spawnRing(this.px, this.py, 100, 0.25, "#ff7a2a", 3);
+        this.moltenTick = ABILITY.kiln.scorchTick;
+        this.hurtCircle(this.px, this.py, ABILITY.kiln.scorchR, stats.dmg * ABILITY.kiln.scorchDmg, false);
+        this.spawnRing(this.px, this.py, ABILITY.kiln.scorchR * 0.55, 0.16, "#ff7a2a", 1.5);
       }
     }
     for (const d of this.decoys) {
@@ -642,6 +686,7 @@ export class Combat {
         time: this.time, hp: this.hp, kills: this.kills, level: this.level, sector: this.sector,
         mobs: this.mobs.filter((m) => m.alive).length, bosses: this.bosses, evo: [...this.evo],
         uplinks: this.uplinksWon, over: this.over, quality: this.quality, fps: Math.round(this.gov.fps), leveling: this.leveling, paused: this.paused, hitstop: this.hitstop,
+        skillCd: this.skillCd, skillMax: this.skillMax, mech: this.mechId, maxHp: this.maxHp,
         // player position in CSS px on the canvas (ignores screen shake); used by screenshot tooling
         screen: { x: this.canvas.clientWidth / 2 + this.px - this.viewCamX, y: this.canvas.clientHeight / 2 + this.py - this.viewCamY },
       }),
@@ -710,6 +755,16 @@ export class Combat {
     this.shield = Math.max(0, this.shield - dt);
     this.coils = Math.max(0, this.coils - dt);
     this.skillCd = Math.max(0, this.skillCd - dt);
+    this.tempoT = Math.max(0, this.tempoT - dt);
+    this.braceT = Math.max(0, this.braceT - dt);
+    this.rootT = Math.max(0, this.rootT - dt);
+    this.wardT = Math.max(0, this.wardT - dt);
+    this.aegisT = Math.max(0, this.aegisT - dt);
+    this.sinceHit += dt;
+    if (!this.bulwarkReady) {
+      this.bulwarkT = Math.max(0, this.bulwarkT - dt);
+      if (this.bulwarkT <= 0) this.bulwarkReady = true;
+    }
     this.fireCd = Math.max(0, this.fireCd - dt);
     this.trauma = Math.max(0, this.trauma - dt * 1.6);
     this.overdriveT = Math.max(0, this.overdriveT - dt);
@@ -732,8 +787,9 @@ export class Combat {
     const odMult = this.overdriveT > 0 ? 1.32 : 1;
     const momMult = this.momentumT > 0 ? 1 + 0.1 * (this.perks.momentum ?? 0) : 1;
     const hd = MECH_MAP[this.mechId].handling;
-    const targetVX = act.moveX * stats.speed * odMult * momMult;
-    const targetVY = act.moveY * stats.speed * odMult * momMult;
+    const moveK = moveMul(this.mechId, { tempo: this.tempoT > 0, rooted: this.rootT > 0, sealed: this.moltenT > 0 });
+    const targetVX = act.moveX * stats.speed * odMult * momMult * moveK;
+    const targetVY = act.moveY * stats.speed * odMult * momMult * moveK;
     const inputMag = Math.hypot(act.moveX, act.moveY);
     // Smooth, frame-rate independent velocity easing (exponential approach = critically
     // damped first-order: no overshoot, no jitter). Each mech keeps its own feel, but
@@ -823,12 +879,19 @@ export class Combat {
 
     if (this.fireCd <= 0) {
       this.shoot(aimX, aimY);
-      this.fireCd = 1 / (stats.fire * (this.overdriveT > 0 ? 1.4 : 1));
+      const slip = fireIntervalMul(this.mechId, Math.hypot(this.pvx, this.pvy), stats.speed);
+      this.fireCd = slip / (stats.fire * (this.overdriveT > 0 ? 1.4 : 1));
     }
     if (act.skill && this.skillCd <= 0) this.castSkill(aimX, aimY);
 
     if ((this.perks.repair ?? 0) > 0) {
       this.hp = Math.min(this.maxHp, this.hp + dt * 3.2 * (this.perks.repair ?? 0));
+    }
+    if (this.mechId === "cross") {
+      if (this.wardT > 0) this.hp = Math.min(this.maxHp, this.hp + dt * this.maxHp * (ABILITY.cross.healFrac / ABILITY.cross.ward));
+      if (this.hp < this.maxHp * ABILITY.cross.mendBelow && this.sinceHit > ABILITY.cross.mendDelay) {
+        this.hp = Math.min(this.maxHp, this.hp + dt * this.maxHp * ABILITY.cross.mendFrac);
+      }
     }
 
     this.spawnAcc += dt;
@@ -841,6 +904,7 @@ export class Combat {
     const interval = Math.max(0.12, 0.85 - intensity * 0.68) / (pace * this.cfg.spawnRate);
     if (this.cfg.scripted) this.runPaceEvents();
     this.updateSkills(dt);
+    this.updateZones(dt);
     if (this.surgeT > 0) this.surgeT -= dt;
     while (this.spawnAcc >= interval) {
       this.spawnAcc -= interval;
@@ -969,7 +1033,7 @@ export class Combat {
       b.vy = Math.sin(ang) * speed;
       const isCrit = Math.random() < stats.crit;
       b.r = r;
-      b.dmg = stats.dmg * (isCrit ? 2.2 : 1) + extra;
+      b.dmg = stats.dmg * weaponDamageMul(this.mechId) * (isCrit ? 2.2 : 1) + extra;
       b.life = life;
       b.pierce = pierce + (mech.weapon === "lance" ? 3 : 0) + (this.evo.has("railstorm") ? 2 : 0);
       if (this.evo.has("railstorm")) b.dmg *= 1.25;
@@ -1100,140 +1164,188 @@ export class Combat {
   private castSkill(ax: number, ay: number) {
     const stats = this.base!;
     const id = this.mechId;
+    const mag = Math.hypot(ax, ay) || 1;
+    const ux = ax / mag;
+    const uy = ay / mag;
+    const ang = Math.atan2(uy, ux);
     this.skillCd = this.skillMax;
     this.audio.skill();
-    this.trauma = Math.min(1, this.trauma + 0.35);
+    // a small kick, not a screen-filling shake
+    this.trauma = Math.min(1, this.trauma + 0.12);
+    const accent = MECH_MAP[id].accent;
     if (id === "aether") {
-      const base = Math.atan2(ay, ax);
-      for (let i = -4; i <= 4; i++) {
-        const ang = base + i * 0.1;
-        const b = this.bullets.find((x) => !x.alive);
-        if (!b) continue;
-        b.alive = true;
-        b.x = this.px;
-        b.y = this.py;
-        b.vx = Math.cos(ang) * 900;
-        b.vy = Math.sin(ang) * 900;
-        b.r = 7;
-        b.dmg = stats.dmg * 3.2;
-        b.life = 0.55;
-        b.pierce = 8;
-        b.friendly = true;
-        b.homing = 0;
-        b.explode = 24;
-        b.color = "#b8f0ff";
-        b.crit = false;
-        b.chain = 0;
-      }
-      this.spawnRing(this.px, this.py, 130, 0.32, "#b8f0ff", 4);
+      const A = ABILITY.aether;
+      this.spawnFriendly(this.px, this.py, ang, A.beamSpeed, A.beamR, stats.dmg * A.beamDmg, A.beamLife, A.beamPierce, 0, "#b8f6ff");
+      this.spawnRing(this.px + ux * 28, this.py + uy * 28, 18, 0.16, accent, 1.5);
     } else if (id === "forge") {
-      for (let i = 0; i < 10; i++) {
-        const ang = Math.atan2(ay, ax) + (Math.random() - 0.5) * 0.8;
-        const b = this.bullets.find((x) => !x.alive);
-        if (!b) continue;
-        b.alive = true;
-        b.x = this.px;
-        b.y = this.py;
-        b.vx = Math.cos(ang) * (340 + Math.random() * 80);
-        b.vy = Math.sin(ang) * (340 + Math.random() * 80);
-        b.r = 6;
-        b.dmg = stats.dmg * 2.4;
-        b.life = 1.6;
-        b.pierce = 0;
-        b.friendly = true;
-        b.homing = 5.5;
-        b.explode = 36;
-        b.color = "#e8a070";
-        b.crit = false;
-        b.chain = 0;
+      const A = ABILITY.forge;
+      this.rootT = A.root;
+      this.braceT = A.root;
+      for (let i = 0; i < A.shells; i++) {
+        const o = (i - (A.shells - 1) / 2) * A.spread;
+        this.spawnFriendly(this.px, this.py, ang + o, A.shellSpeed, A.shellR, stats.dmg * A.shellDmg, A.shellLife, 0, A.shellExplode, "#e8a070");
       }
-      this.spawnRing(this.px, this.py, 60, 0.3, "#e8a070", 3);
+      this.spawnRing(this.px + ux * 20, this.py + uy * 20, 28, 0.2, "#e8a070", 2);
     } else if (id === "scythe") {
+      const A = ABILITY.scythe;
       const fromX = this.px;
       const fromY = this.py;
-      this.invuln = 0.4;
-      this.px += ax * 240;
-      this.py += ay * 240;
-      this.px = Math.max(40, Math.min(WORLD - 40, this.px));
-      this.py = Math.max(40, Math.min(WORLD - 40, this.py));
-      for (let i = 0; i < 8; i++) {
-        const t2 = i / 7;
-        this.burst(fromX + (this.px - fromX) * t2, fromY + (this.py - fromY) * t2, 2, "#c4a574");
+      this.invuln = A.iFrame;
+      const dest = this.clampWorld(this.px + ux * A.dash, this.py + uy * A.dash);
+      this.px = dest.x;
+      this.py = dest.y;
+      const steps = 6;
+      for (let i = 0; i <= steps; i++) {
+        const t2 = i / steps;
+        const x = fromX + (this.px - fromX) * t2;
+        const y = fromY + (this.py - fromY) * t2;
+        this.hurtCircle(x, y, A.trailR, stats.dmg * (A.trailDmg / steps), false);
+        this.burst(x, y, 1, accent);
       }
-      this.hurtCircle(this.px, this.py, 70, stats.dmg * 4.5, true);
-      this.spawnRing(this.px, this.py, 80, 0.28, "#c4a574", 3);
+      this.spawnRing(this.px, this.py, 22, 0.16, accent, 1.5);
     } else if (id === "dune") {
-      this.shield = 2.6;
-      this.invuln = 0.25;
-      this.spawnRing(this.px, this.py, 165, 0.4, "#e8a060", 4);
+      const A = ABILITY.dune;
+      this.aegisT = A.aegis;
+      this.aegisAng = ang;
       for (const m of this.mobs) {
         if (!m.alive) continue;
         const dx = m.x - this.px;
         const dy = m.y - this.py;
         const d = Math.hypot(dx, dy);
-        if (d < 160 && d > 0.1) {
-          m.x += (dx / d) * 90;
-          m.y += (dy / d) * 90;
-          m.hp -= stats.dmg * 1.4;
-          m.flash = 0.12;
+        const facing = dx * ux + dy * uy;
+        if (d < A.shoveR && d > 0.1 && facing > 0) {
+          m.x += (dx / d) * A.shove;
+          m.y += (dy / d) * A.shove;
+          this.hurtMob(m, stats.dmg * A.shoveDmg, 0, false, true);
         }
       }
+      this.spawnRing(this.px + ux * 36, this.py + uy * 36, 34, 0.22, "#e8c49a", 2);
     } else if (id === "serpent") {
-      this.coils = 5.2;
-      this.spawnRing(this.px, this.py, 55, 0.24, "#7ae0a0", 2);
+      this.coils = ABILITY.serpent.orbit;
+      this.spawnRing(this.px, this.py, 36, 0.18, accent, 1.5);
     } else if (id === "storm") {
-      this.overdriveT = Math.max(this.overdriveT, 3.2);
-      this.hurtCircle(this.px, this.py, 130, stats.dmg * 2.2, true);
-      this.spawnRing(this.px, this.py, 130, 0.4, "#8fd0ff", 4);
+      const A = ABILITY.storm;
+      const p = this.clampWorld(this.px + ux * A.netReach, this.py + uy * A.netReach);
+      this.openZone({ kind: "net", x: p.x, y: p.y, x2: p.x, y2: p.y, r: A.netR, t: A.net, tick: 0.15, dmg: stats.dmg * A.netDmg, color: "#8fd0ff", arm: 0 });
+      this.spawnRing(p.x, p.y, 40, 0.2, "#8fd0ff", 1.5);
     } else if (id === "vulture") {
-      const base = Math.atan2(ay, ax);
-      for (let i = -2; i <= 2; i++) {
-        const ang = base + i * 0.32;
-        const b = this.bullets.find((x) => !x.alive);
-        if (!b) continue;
-        b.alive = true;
-        b.x = this.px;
-        b.y = this.py;
-        b.vx = Math.cos(ang) * 180;
-        b.vy = Math.sin(ang) * 180;
-        b.r = 6;
-        b.dmg = stats.dmg * 2;
-        b.life = 0.8;
-        b.pierce = 0;
-        b.friendly = true;
-        b.homing = 0;
-        b.explode = 40;
-        b.color = "#c9a25a";
-        b.crit = false;
-        b.chain = 0;
+      const A = ABILITY.vulture;
+      for (let i = 0; i < A.mines; i++) {
+        const p = this.clampWorld(this.px + ux * (50 + i * A.mineGap), this.py + uy * (50 + i * A.mineGap));
+        this.openZone({ kind: "mine", x: p.x, y: p.y, x2: p.x, y2: p.y, r: A.mineR, t: A.mineLife, tick: 0, dmg: stats.dmg * A.mineDmg, color: "#c9d36a", arm: A.mineArm });
       }
-      this.spawnRing(this.px, this.py, 40, 0.24, "#c9a25a", 3);
+      this.spawnRing(this.px, this.py, 16, 0.14, accent, 1.5);
     } else if (id === "moth") {
-      this.lure = { t: 3, x: Math.max(40, Math.min(WORLD - 40, this.px + ax * 170)), y: Math.max(40, Math.min(WORLD - 40, this.py + ay * 170)) };
-      this.spawnRing(this.lure.x, this.lure.y, 320, 0.5, "#ffb347", 3);
+      const A = ABILITY.moth;
+      const p = this.clampWorld(this.px + ux * A.lureReach, this.py + uy * A.lureReach);
+      this.lure = { t: A.lure, x: p.x, y: p.y, r: A.lureR };
+      this.spawnRing(p.x, p.y, 28, 0.24, accent, 2);
     } else if (id === "kiln") {
-      this.moltenT = 3.5;
+      const A = ABILITY.kiln;
+      this.moltenT = A.seal;
       this.moltenTick = 0;
-      this.invuln = 3.5;
-      this.spawnRing(this.px, this.py, 110, 0.4, "#ff7a2a", 5);
-      this.screenFlash("#ff7a2a", 0.2);
+      this.invuln = A.seal;
+      this.spawnRing(this.px, this.py, 32, 0.22, accent, 2);
     } else if (id === "kite") {
-      const base = Math.atan2(ay, ax);
-      this.decoys = [-1, 0, 1].map((i) => ({
-        x: Math.max(40, Math.min(WORLD - 40, this.px + Math.cos(base + Math.PI + i * 1.1) * 70)),
-        y: Math.max(40, Math.min(WORLD - 40, this.py + Math.sin(base + Math.PI + i * 1.1) * 70)),
-        t: 4,
-        cd: i * 0.1 + 0.1,
-      }));
-      this.invuln = Math.max(this.invuln, 0.3);
-      for (const d of this.decoys) this.spawnRing(d.x, d.y, 30, 0.3, "#ff8ab0", 3);
+      const A = ABILITY.kite;
+      const fromX = this.px;
+      const fromY = this.py;
+      this.invuln = Math.max(this.invuln, A.iFrame);
+      const dest = this.clampWorld(this.px + ux * A.dash, this.py + uy * A.dash);
+      this.px = dest.x;
+      this.py = dest.y;
+      this.openZone({ kind: "ribbon", x: fromX, y: fromY, x2: this.px, y2: this.py, r: A.lineR, t: A.line, tick: 0, dmg: stats.dmg * A.lineDmg, color: accent, arm: 0 });
+      this.spawnRing(this.px, this.py, 16, 0.14, accent, 1.5);
     } else if (id === "cross") {
-      this.shield = 3.2;
-      this.invuln = 0.3;
-      this.hp = Math.min(this.maxHp, this.hp + stats.hp * 0.22);
-      this.hurtCircle(this.px, this.py, 110, stats.dmg * 1.6, true);
-      this.spawnRing(this.px, this.py, 110, 0.35, "#ffe8a0", 4);
+      this.wardT = ABILITY.cross.ward;
+      this.spawnRing(this.px, this.py, 26, 0.28, accent, 1.5);
     }
+  }
+
+  private clampWorld(x: number, y: number) {
+    return { x: Math.max(40, Math.min(WORLD - 40, x)), y: Math.max(40, Math.min(WORLD - 40, y)) };
+  }
+
+  private spawnFriendly(x: number, y: number, ang: number, speed: number, r: number, dmg: number, life: number, pierce: number, explode: number, color: string) {
+    const b = this.bullets.find((q) => !q.alive);
+    if (!b) return;
+    b.alive = true;
+    b.x = x;
+    b.y = y;
+    b.vx = Math.cos(ang) * speed;
+    b.vy = Math.sin(ang) * speed;
+    b.r = r;
+    b.dmg = dmg;
+    b.life = life;
+    b.pierce = pierce;
+    b.friendly = true;
+    b.homing = 0;
+    b.explode = explode;
+    b.color = color;
+    b.crit = false;
+    b.chain = 0;
+    b.ret = 0;
+  }
+
+  private openZone(z: Omit<Zone, "alive">) {
+    const slot = this.zones.find((q) => !q.alive);
+    if (!slot) return;
+    Object.assign(slot, z, { alive: true });
+  }
+
+  private updateZones(dt: number) {
+    const A = ABILITY;
+    for (const z of this.zones) {
+      if (!z.alive) continue;
+      z.t -= dt;
+      z.arm = Math.max(0, z.arm - dt);
+      z.tick -= dt;
+      if (z.kind === "mine") {
+        if (z.arm > 0) continue;
+        let tripped = z.t <= 0;
+        if (!tripped) {
+          for (const m of this.mobs) {
+            if (!m.alive) continue;
+            if ((m.x - z.x) ** 2 + (m.y - z.y) ** 2 < (z.r + m.r) * (z.r + m.r)) { tripped = true; break; }
+          }
+        }
+        if (tripped) {
+          z.alive = false;
+          this.hurtCircle(z.x, z.y, z.r, z.dmg, false);
+          this.spawnRing(z.x, z.y, z.r, 0.22, z.color, 2);
+          this.audio.explode();
+        }
+        continue;
+      }
+      if (z.t <= 0) { z.alive = false; continue; }
+      if (z.tick > 0) continue;
+      z.tick = z.kind === "ribbon" ? A.kite.lineTick : z.kind === "scorch" ? A.vulture.craterTick : A.storm.netTick;
+      for (const m of this.mobs) {
+        if (!m.alive) continue;
+        const hit = z.kind === "ribbon"
+          ? distToSegment(m.x, m.y, z.x, z.y, z.x2, z.y2) < z.r + m.r * 0.35
+          : (m.x - z.x) ** 2 + (m.y - z.y) ** 2 < (z.r + m.r) * (z.r + m.r);
+        if (hit) this.hurtMob(m, z.dmg, 0, false, true, "dot");
+      }
+    }
+  }
+
+  private paceFor(m: Mob): number {
+    let mul = 1;
+    if (this.mechId === "moth" && inWake(this.px, this.py, this.aim, m.x, m.y, ABILITY.moth.wakeR)) mul *= ABILITY.moth.wakeSlow;
+    for (const z of this.zones) {
+      if (!z.alive || z.kind !== "net" || z.arm > 0) continue;
+      if ((m.x - z.x) ** 2 + (m.y - z.y) ** 2 < (z.r + m.r) * (z.r + m.r)) mul *= ABILITY.storm.netSlow;
+    }
+    return mul;
+  }
+
+  private maybeCrater(x: number, y: number, explode: number, dmg: number) {
+    if (this.mechId !== "vulture" || explode < ABILITY.vulture.craterMin) return;
+    this.openZone({
+      kind: "scorch", x, y, x2: x, y2: y, r: ABILITY.vulture.craterR, t: ABILITY.vulture.crater,
+      tick: 0.05, dmg: dmg * ABILITY.vulture.craterDmg, color: "#d6f07a", arm: 0,
+    });
   }
 
   private spawnMob(boss: boolean, kindOverride?: string, at?: { x: number; y: number }): Mob | undefined {
@@ -1309,6 +1421,9 @@ export class Combat {
     m.vx = 0;
     m.vy = 0;
     m.flash = 0;
+    m.venom = 0;
+    m.venomDps = 0;
+    m.venomAcc = 0;
     m.touchCd = 0;
     m.baseSpeed = m.speed;
     m.telegraph = 0;
@@ -1427,6 +1542,15 @@ export class Combat {
       if (!m.alive) continue;
       m.flash = Math.max(0, m.flash - dt * 6);
       m.touchCd = Math.max(0, m.touchCd - dt);
+      if (m.venom > 0) {
+        m.venom -= dt;
+        m.venomAcc -= dt;
+        if (m.venomAcc <= 0) {
+          m.venomAcc = 0.4;
+          this.hurtMob(m, m.venomDps * 0.4, 0, false, true, "dot");
+          if (!m.alive) continue;
+        }
+      }
       m.fireCd = Math.max(0, m.fireCd - dt);
       let dx = this.px - m.x;
       let dy = this.py - m.y;
@@ -1555,6 +1679,7 @@ export class Combat {
         m.vx = m.dashDX * m.speed;
         m.vy = m.dashDY * m.speed;
       } else {
+        chaseSpeed *= this.paceFor(m);
         m.vx = dx * chaseSpeed + sx * 18;
         m.vy = dy * chaseSpeed + sy * 18;
       }
@@ -1632,6 +1757,7 @@ export class Combat {
       if (b.life <= 0) {
         if (b.friendly && b.explode > 0) {
           this.hurtCircle(b.x, b.y, b.explode, b.dmg * 0.6, false);
+          this.maybeCrater(b.x, b.y, b.explode, b.dmg);
           this.audio.explode();
         }
         b.alive = false;
@@ -1645,6 +1771,7 @@ export class Combat {
           const dy = m.y - b.y;
           if (dx * dx + dy * dy < (m.r + b.r) * (m.r + b.r)) {
             this.hurtMob(m, b.dmg, b.explode, b.crit);
+            if (b.explode > 0) this.maybeCrater(b.x, b.y, b.explode, b.dmg);
             if (b.chain > 0) {
               const next = this.nearestMobExcept(m, b.x, b.y, 260);
               b.chain -= 1;
@@ -1673,7 +1800,11 @@ export class Combat {
         const dx = this.px - b.x;
         const dy = this.py - b.y;
         if (dx * dx + dy * dy < (16 + b.r) * (16 + b.r)) {
-          this.damagePlayer(b.dmg);
+          if (this.aegisT > 0 && aegisBlocks(this.aegisAng, b.vx, b.vy)) {
+            this.burst(b.x, b.y, 2, "#e8d2a8");
+          } else {
+            this.damagePlayer(b.dmg);
+          }
           b.alive = false;
           b.ret = 0;
         }
@@ -1697,7 +1828,7 @@ export class Combat {
     }
   }
 
-  private hurtMob(m: Mob, dmg: number, explode: number, crit = false, quiet = false) {
+  private hurtMob(m: Mob, dmg: number, explode: number, crit = false, quiet = false, tag = "") {
     dmg *= m.boss ? 1 + 0.15 * (this.perks.thermal ?? 0) : 1;
     if (m.elite === "armored") dmg *= 0.55;
     if (m.shieldHp > 0) {
@@ -1708,6 +1839,18 @@ export class Combat {
     }
     m.hp -= dmg;
     m.flash = 0.16;
+    if (this.mechId === "serpent" && tag !== "dot" && dmg > 0) {
+      m.venom = ABILITY.serpent.venom;
+      m.venomDps = Math.max(m.venomDps, (this.base?.dmg ?? dmg) * ABILITY.serpent.venomFrac);
+      m.venomAcc = Math.min(m.venomAcc || 0.4, 0.4);
+    }
+    if (this.mechId === "storm" && tag === "" && dmg > 0) {
+      this.capHits += 1;
+      if (this.capHits % ABILITY.storm.every === 0) {
+        const next = this.nearestMobExcept(m, m.x, m.y, ABILITY.storm.chainR);
+        if (next) this.hurtMob(next, dmg * ABILITY.storm.chainFrac, 0, false, true, "chain");
+      }
+    }
     if (!quiet) this.burst(m.x, m.y, m.boss ? 10 : 4, m.boss ? "#e8a070" : "#d8d0c4");
     this.spawnFloat(m.x, m.y, Math.round(dmg).toString(), crit ? "#ffd166" : quiet ? "#e8a070" : "#e8e0c8", crit);
     if (crit && this.evo.has("nova")) {
@@ -1723,6 +1866,7 @@ export class Combat {
   private killMob(m: Mob, explode: number, dmg: number) {
     m.alive = false;
     this.kills += 1;
+    if (this.mechId === "scythe") this.tempoT = ABILITY.scythe.tempo;
     this.registerCombo();
     this.audio.death();
     this.dropFrom(m);
@@ -1877,7 +2021,15 @@ export class Combat {
     if (this.invuln > 0 || this.godMode) return;
     let dmg = Math.max(0.5, raw - 1.4 * (this.perks.barrier ?? 0));
     if (this.shield > 0) dmg *= 0.2;
+    const bulwark = this.mechId === "dune" && this.bulwarkReady;
+    dmg *= incomingDamageMul(this.mechId, { bulwark, brace: this.braceT > 0, ward: this.wardT > 0 });
+    if (bulwark) {
+      this.bulwarkReady = false;
+      this.bulwarkT = ABILITY.dune.bulwarkCd;
+    }
+    this.sinceHit = 0;
     this.hp -= dmg;
+    if (this.mechId === "kiln" && dmg > 0) this.hurtCircle(this.px, this.py, ABILITY.kiln.thornR, dmg * ABILITY.kiln.thornFrac, false);
     this.invuln = 0.45;
     this.trauma = Math.min(1, this.trauma + 0.4);
     this.audio.hurt();
@@ -1961,7 +2113,7 @@ export class Combat {
   private screenFlash(color: string, t: number) {
     if (this.reduced) return;
     this.flashColor = color;
-    this.flashT = Math.max(this.flashT, t);
+    this.flashT = Math.min(0.12, Math.max(this.flashT, t * 0.35));
   }
 
   private updateFx(dt: number) {
@@ -2213,9 +2365,28 @@ export class Combat {
       }
       const sc = (m.boss ? (m.kind === "warden" ? 1.5 : 1.35) : m.kind === "crawler" ? 1.15 : 1) * (m.elite ? 1.25 : 1);
       const ang = Math.atan2(this.py - m.y, this.px - m.x);
+      // light disc + rim so the suit reads on dark floor plates
+      const rim = enemyRim(m.kind);
+      ctx.save();
+      ctx.fillStyle = rim;
+      ctx.globalAlpha = 0.34;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.r * sc + 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = rim;
+      ctx.lineWidth = m.boss ? 3 : 2.4;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.r * sc + 2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
       const box = MOB_BOX[m.kind] ?? 64;
       const spr = cachedSprite(`mob:${m.kind}`, box, (c) => drawEnemyTop(c, m.kind, 0));
       drawSprite(ctx, spr, m.x, m.y, ang, sc);
+      ctx.fillStyle = rim;
+      ctx.beginPath();
+      ctx.arc(m.x + Math.cos(ang) * m.r * 0.55, m.y + Math.sin(ang) * m.r * 0.55, m.boss ? 4.5 : 3.2, 0, Math.PI * 2);
+      ctx.fill();
       if (m.flash > 0) {
         // additive white hit-flash (cached glow, no per-frame gradient)
         const g = glowSprite("#ffffff", true);
@@ -2277,8 +2448,8 @@ export class Combat {
       ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
       ctx.stroke();
       ctx.globalAlpha = 1;
-      if (bl && r.maxR > 40) {
-        bl.ctx.globalAlpha = a * 0.6;
+      if (bl && r.maxR > 90) {
+        bl.ctx.globalAlpha = a * 0.22;
         bl.ctx.strokeStyle = r.color;
         bl.ctx.lineWidth = r.width * 3;
         bl.ctx.beginPath();
@@ -2415,24 +2586,43 @@ export class Combat {
       ctx.restore();
       ctx.globalAlpha = 1;
     }
+    this.drawZones(ctx);
     if (this.lure.t > 0) {
       const g = glowSprite("#ffb347", true);
-      const pr = 18 + Math.sin(this.time * 12) * 4;
+      const pr = 12 + Math.sin(this.time * 12) * 2;
       ctx.drawImage(g.c, this.lure.x - pr, this.lure.y - pr, pr * 2, pr * 2);
-      ctx.strokeStyle = "rgba(255,179,71,0.35)";
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(255,179,71,0.45)";
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(this.lure.x, this.lure.y, 320 * (this.lure.t / 3), 0, Math.PI * 2);
+      ctx.arc(this.lure.x, this.lure.y, Math.max(18, this.lure.r * (this.lure.t / ABILITY.moth.lure)), 0, Math.PI * 2);
       ctx.stroke();
-      if (bl) bl.light(this.lure.x, this.lure.y, 90, "#ffb347", 0.8);
+      if (bl) bl.light(this.lure.x, this.lure.y, 36, "#ffb347", 0.45);
     }
     if (this.moltenT > 0) {
-      ctx.strokeStyle = `rgba(255,122,42,${0.45 + 0.3 * Math.sin(this.time * 20)})`;
-      ctx.lineWidth = 5;
+      ctx.strokeStyle = `rgba(255,122,42,${0.4 + 0.2 * Math.sin(this.time * 16)})`;
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.arc(this.px, this.py, 34, 0, Math.PI * 2);
+      ctx.arc(this.px, this.py, 28, 0, Math.PI * 2);
       ctx.stroke();
-      if (bl) bl.light(this.px, this.py, 120, "#ff7a2a", 0.7);
+      if (bl) bl.light(this.px, this.py, 48, "#ff7a2a", 0.35);
+    }
+    if (this.aegisT > 0) {
+      ctx.save();
+      ctx.translate(this.px, this.py);
+      ctx.rotate(this.aegisAng);
+      ctx.strokeStyle = "rgba(232, 196, 154, 0.85)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(8, 0, 30, -ABILITY.dune.aegisHalf, ABILITY.dune.aegisHalf);
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (this.wardT > 0) {
+      ctx.strokeStyle = "rgba(90, 224, 255, 0.7)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(this.px, this.py, 22, 0, Math.PI * 2);
+      ctx.stroke();
     }
     for (const d of this.decoys) {
       if (d.t <= 0) continue;
@@ -2480,12 +2670,13 @@ export class Combat {
       ctx.globalAlpha = 1;
     }
     if (this.flashT > 0) {
-      ctx.globalCompositeOperation = "lighter";
-      ctx.globalAlpha = Math.min(0.45, this.flashT * 1.4);
-      ctx.fillStyle = this.flashColor;
+      // edge pulse only — a full-screen wash hides the fight
+      const a = Math.min(0.16, this.flashT * 0.7);
+      const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.46, w / 2, h / 2, Math.max(w, h) * 0.72);
+      g.addColorStop(0, "rgba(0,0,0,0)");
+      g.addColorStop(1, withAlpha(this.flashColor, a));
+      ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = "source-over";
     }
     this.drawUplinkHud(ctx, w, h);
     this.drawMinimap(ctx, w);
@@ -2494,6 +2685,43 @@ export class Combat {
     if (this.paused && !this.leveling && !this.over) {
       ctx.fillStyle = "rgba(9,9,11,0.45)";
       ctx.fillRect(0, 0, w, h);
+    }
+  }
+
+  private drawZones(ctx: CanvasRenderingContext2D) {
+    for (const z of this.zones) {
+      if (!z.alive) continue;
+      ctx.save();
+      if (z.kind === "ribbon") {
+        ctx.strokeStyle = z.color;
+        ctx.globalAlpha = 0.85;
+        ctx.lineWidth = 3;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(z.x, z.y);
+        ctx.lineTo(z.x2, z.y2);
+        ctx.stroke();
+      } else if (z.kind === "mine") {
+        ctx.strokeStyle = z.color;
+        ctx.globalAlpha = z.arm > 0 ? 0.35 : 0.9;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(z.x, z.y, z.arm > 0 ? 6 : 8, 0, Math.PI * 2);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = z.color;
+        ctx.globalAlpha = z.kind === "net" ? 0.08 : 0.16;
+        ctx.beginPath();
+        ctx.arc(z.x, z.y, z.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 0.55;
+        ctx.strokeStyle = z.color;
+        ctx.lineWidth = 1.25;
+        ctx.setLineDash(z.kind === "net" ? [6, 5] : []);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.restore();
     }
   }
 

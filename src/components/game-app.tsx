@@ -277,7 +277,8 @@ export function GameApp() {
             onMute={() => setMuted((m) => !m)}
             onPause={() => combatRef.current?.pause(!(hud?.paused ?? false))}
           />
-          <TouchPad input={inputRef.current} />
+          <TouchPad input={inputRef.current} hud={hud} mechId={save.selected} />
+          <ControlsBrief />
           {choices && (
             <LevelUp
               choices={choices}
@@ -452,15 +453,16 @@ function HudOverlay({
           {hud?.paused ? <Play className="size-4" /> : <Pause className="size-4" />}
         </button>
       </div>
-      <div className="absolute bottom-6 right-24 hidden pointer-fine:sm:block">
+      <div className="absolute bottom-6 right-24 hidden text-center pointer-fine:sm:block">
         <div
           className={cn(
-            "grid size-16 place-items-center rounded-full border px-2 text-center font-display text-[11px] font-semibold uppercase tracking-wider",
+            "grid size-16 place-items-center rounded-full border px-2 font-display text-[11px] font-semibold uppercase tracking-wider",
             skillReady ? "border-accent text-fg" : "border-border text-muted",
           )}
         >
           {skillReady ? "Skill" : `${hud?.skillCd.toFixed(1)}s`}
         </div>
+        <p className="mt-1 max-w-16 text-[10px] uppercase leading-tight tracking-wider text-muted">{mech.skill.name}</p>
       </div>
     </div>
   );
@@ -585,23 +587,71 @@ function TouchStick({
   );
 }
 
-function TouchPad({ input }: { input: GameInput }) {
+function TouchPad({ input, hud, mechId }: { input: GameInput; hud: HudState | null; mechId: MechId }) {
+  const mech = MECH_MAP[mechId];
+  const ready = (hud?.skillCd ?? 0) <= 0;
+  const frac = hud && hud.skillMax > 0 ? Math.max(0, 1 - hud.skillCd / hud.skillMax) : 1;
   return (
     <>
       <TouchStick side="left" label="Move" onMove={(x, y) => input.setLeftStick(x, y)} />
       <TouchStick side="right" label="Aim" onMove={(x, y) => input.setRightStick(x, y)} />
       <button
         type="button"
-        className="absolute bottom-[calc(46%+0.5rem)] right-5 hidden size-16 landscape:right-32 place-items-center rounded-full border border-border bg-surface/80 font-display text-[11px] font-semibold uppercase tracking-wider pointer-coarse:grid"
+        data-testid="skill-btn"
+        aria-label={ready ? mech.skill.name : `${mech.skill.name} cooling down`}
+        className={cn(
+          "absolute bottom-[calc(46%+0.5rem)] right-5 hidden size-16 landscape:right-32 place-items-center rounded-full border bg-surface/80 font-display text-[10px] font-semibold uppercase leading-tight tracking-wider pointer-coarse:grid",
+          ready ? "border-accent text-fg" : "border-border text-muted",
+        )}
         onPointerDown={(e) => {
           e.preventDefault();
           e.stopPropagation();
           input.skillTap = true;
         }}
       >
-        Skill
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0.5 rounded-full"
+          style={{ background: `conic-gradient(var(--color-accent) ${frac * 360}deg, transparent 0)` , opacity: 0.85 }}
+        />
+        <span className="pointer-events-none absolute inset-1.5 rounded-full bg-surface" />
+        <span className="relative px-1 text-center">{ready ? "Skill" : `${hud?.skillCd.toFixed(1)}`}</span>
       </button>
     </>
+  );
+}
+
+function ControlsBrief() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    try {
+      setOpen(localStorage.getItem("wp-controls-briefed") !== "1");
+    } catch {
+      setOpen(true);
+    }
+  }, []);
+  if (!open) return null;
+  const dismiss = () => {
+    try {
+      localStorage.setItem("wp-controls-briefed", "1");
+    } catch {
+      /* private mode */
+    }
+    setOpen(false);
+  };
+  return (
+    <div
+      className="pointer-events-auto absolute left-1/2 top-24 z-20 w-[min(22rem,calc(100%-1.5rem))] -translate-x-1/2 rounded-xl border border-border bg-surface/95 p-3 landscape:top-[4.75rem]"
+      data-testid="controls-brief"
+    >
+      <p className="font-display text-sm font-semibold">How to move</p>
+      <p className="mt-1 text-sm leading-relaxed text-muted">
+        Left thumb moves. Right thumb aims and fires. Tap Skill above the aim stick when the ring is full. On a keyboard: WASD, mouse, Space.
+      </p>
+      <button type="button" onClick={dismiss} className="mt-2 min-h-11 w-full rounded-lg bg-accent font-bold text-accent-fg">
+        Got it
+      </button>
+    </div>
   );
 }
 

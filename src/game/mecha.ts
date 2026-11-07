@@ -7,6 +7,7 @@
  * Sprites face +x (the aim direction).
  */
 import type { MechId, WeaponKind } from "./types";
+import { LINEUP_PORTS } from "./lineup-art";
 
 const INK = "#0b0d14";
 type Pt = readonly [number, number];
@@ -54,6 +55,11 @@ function plate(ctx: CanvasRenderingContext2D, pts: readonly Pt[], base: string, 
   ctx.restore();
   path(ctx, pts);
   ctx.lineJoin = "round";
+  // light rim first so dark plates stay readable on the dark floor tiles
+  ctx.strokeStyle = "rgba(236, 244, 252, 0.85)";
+  ctx.lineWidth = line + 2.1;
+  ctx.stroke();
+  path(ctx, pts);
   ctx.strokeStyle = INK;
   ctx.lineWidth = line;
   ctx.stroke();
@@ -116,18 +122,35 @@ export interface BoosterSpec {
 // Ports for the SVG mechs (all 11, vault mechs included) sit on each sprite's rear nozzle, scaled by MECH_ART_SCALE (0.75);
 // flame colours match each sprite's glow (and the mech accent in data.ts where set).
 export const MECH_BOOSTERS: Record<MechId, BoosterSpec> = {
-  aether: { ports: [[-13.5, 0]], color: "#ff8a4a", core: "#fff0e0", size: 1.2, pattern: "steady" },
-  forge: { ports: [[-17, -5], [-17, 5]], color: "#ff9a3a", core: "#ffe8b0", size: 0.95, pattern: "stagger" },
-  scythe: { ports: [[-13, 0]], color: "#3aff7a", core: "#d0ffe0", size: 1.2, pattern: "flicker" },
-  dune: { ports: [[-24, 0]], color: "#5ab8ff", core: "#e0f4ff", size: 1.1, pattern: "pulse" },
-  serpent: { ports: [[-14, 0]], color: "#8ae0ff", core: "#eafcff", size: 1.1, pattern: "flicker" },
-  storm: { ports: [[-10, 0]], color: "#ff3a7a", core: "#ffd8e6", size: 1, pattern: "stagger" },
-  vulture: { ports: [[-12, 0]], color: "#7ae070", core: "#e0ffd8", size: 1.1, pattern: "pulse" },
-  cross: { ports: [[-8, 0]], color: "#5ae0ff", core: "#e8fcff", size: 1.1, pattern: "steady" },
-  moth: { ports: [[-24, -3], [-24, 3]], color: "#ffd08a", core: "#fff6e0", size: 0.8, pattern: "pulse" },
-  kiln: { ports: [[-26, -6], [-26, 6]], color: "#ff6a1a", core: "#ffe0a0", size: 1.3, pattern: "flicker" },
-  kite: { ports: [[-22, 0]], color: "#ff5a8a", core: "#ffe0ec", size: 1.1, pattern: "stagger" },
+  aether: { ports: LINEUP_PORTS.aether, color: "#ff8a4a", core: "#fff0e0", size: 1.2, pattern: "steady" },
+  forge: { ports: LINEUP_PORTS.forge, color: "#ff9a3a", core: "#ffe8b0", size: 0.95, pattern: "stagger" },
+  scythe: { ports: LINEUP_PORTS.scythe, color: "#3aff7a", core: "#d0ffe0", size: 1.2, pattern: "flicker" },
+  dune: { ports: LINEUP_PORTS.dune, color: "#5ab8ff", core: "#e0f4ff", size: 1.1, pattern: "pulse" },
+  serpent: { ports: LINEUP_PORTS.serpent, color: "#8ae0ff", core: "#eafcff", size: 1.1, pattern: "flicker" },
+  storm: { ports: LINEUP_PORTS.storm, color: "#ff3a7a", core: "#ffd8e6", size: 1, pattern: "stagger" },
+  vulture: { ports: LINEUP_PORTS.vulture, color: "#7ae070", core: "#e0ffd8", size: 1.1, pattern: "pulse" },
+  cross: { ports: LINEUP_PORTS.cross, color: "#5ae0ff", core: "#e8fcff", size: 1.1, pattern: "steady" },
+  moth: { ports: LINEUP_PORTS.moth, color: "#ffd08a", core: "#fff6e0", size: 0.8, pattern: "pulse" },
+  kiln: { ports: LINEUP_PORTS.kiln, color: "#ff6a1a", core: "#ffe0a0", size: 1.3, pattern: "flicker" },
+  kite: { ports: LINEUP_PORTS.kite, color: "#ff5a8a", core: "#ffe0ec", size: 1.1, pattern: "stagger" },
 };
+
+/** Bright rim used under each enemy so it separates from dark floor plates. */
+export function enemyRim(kind: string): string {
+  switch (kind) {
+    case "drone": return "#ffd7b0";
+    case "swarm": return "#ffc4e4";
+    case "walker": return "#d6ffb0";
+    case "crawler": return "#ffd0a0";
+    case "charger": return "#ffe2a4";
+    case "sniper": return "#e4d2ff";
+    case "shielder": return "#cfefff";
+    case "ace": return "#ffe38a";
+    case "titan": return "#ffb090";
+    case "warden": return "#ffb0a0";
+    default: return "#f2f6fb";
+  }
+}
 
 function nozzles(ctx: CanvasRenderingContext2D, id: MechId) {
   const b = MECH_BOOSTERS[id];
@@ -329,13 +352,13 @@ interface GruntStyle {
   eye: string;
 }
 const GRUNT: Record<string, GruntStyle> = {
-  walker: { armor: "#5f7a4a", dark: "#38492c", eye: "#ff3a6a" },
-  crawler: { armor: "#7a5a3a", dark: "#4a3422", eye: "#ff5a3a" },
-  charger: { armor: "#c46a2a", dark: "#7a3c14", eye: "#ffd04a" },
-  sniper: { armor: "#5a4a7a", dark: "#342a4c", eye: "#ff4a6a" },
-  shielder: { armor: "#4a6a8a", dark: "#2a3e54", eye: "#ff4a6a" },
-  ace: { armor: "#2c2c3a", dark: "#16161e", eye: "#ffcf4a" },
-  titan: { armor: "#5a4a3c", dark: "#2e241c", eye: "#ff4a2a" },
+  walker: { armor: "#9ed07a", dark: "#4e6a38", eye: "#ff4d7a" },
+  crawler: { armor: "#e0b07a", dark: "#6a4630", eye: "#ff6a3a" },
+  charger: { armor: "#f0a04a", dark: "#8a4c18", eye: "#ffe08a" },
+  sniper: { armor: "#c4b0ea", dark: "#5a4878", eye: "#ff6a88" },
+  shielder: { armor: "#9ec8ea", dark: "#3e627f", eye: "#ff6a88" },
+  ace: { armor: "#e2c86a", dark: "#3a3420", eye: "#fff3b0" },
+  titan: { armor: "#e09a72", dark: "#5a3828", eye: "#ff6a3a" },
 };
 
 /** Drone-pilot head: a hex shell with three eyes in a triangle. */
@@ -394,8 +417,8 @@ export function drawMechaEnemy(ctx: CanvasRenderingContext2D, kind: string): boo
   switch (kind) {
     case "drone": {
       // spherical scout pod with stub fins and a ring sensor
-      both(ctx, [[-8, -4], [-14, -9], [-12, -3]], "#6a5a4a", 1.4);
-      ctx.fillStyle = "#8a7258";
+      both(ctx, [[-8, -4], [-14, -9], [-12, -3]], "#d2b48a", 1.4);
+      ctx.fillStyle = "#e4c8a4";
       ctx.strokeStyle = INK;
       ctx.lineWidth = 1.8;
       ctx.beginPath();
@@ -403,7 +426,7 @@ export function drawMechaEnemy(ctx: CanvasRenderingContext2D, kind: string): boo
       ctx.fill();
       ctx.save();
       ctx.clip();
-      ctx.fillStyle = "#4e3e30";
+      ctx.fillStyle = "#8a6848";
       ctx.fillRect(-8, 1.5, 16, 8);
       ctx.restore();
       ctx.stroke();
@@ -413,12 +436,13 @@ export function drawMechaEnemy(ctx: CanvasRenderingContext2D, kind: string): boo
       ctx.arc(4, 0, 2.6, 0, Math.PI * 2);
       ctx.stroke();
       ctx.strokeStyle = "#ff3a4a";
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = 1.6;
       ctx.stroke();
+      lens(ctx, 4, 0, 2.4, "#ff4a3a");
       return true;
     }
     case "swarm":
-      plate(ctx, [[-6, -5], [8, 0], [-6, 5], [-3, 0]], "#b04a86", 1.4);
+      plate(ctx, [[-6, -5], [8, 0], [-6, 5], [-3, 0]], "#ff7ac4", 1.4);
       lens(ctx, 2, 0, 1.3, "#ffc0e0");
       return true;
     case "walker":

@@ -1,5 +1,5 @@
 import { drawMecha, drawMechaEnemy } from "./mecha";
-import { drawMechArt, hasMechArt } from "./mech-art";
+import { drawLineup } from "./lineup-art";
 import type { WeaponKind } from "./types";
 import type { MechId } from "./types";
 
@@ -157,9 +157,8 @@ const MECH_WEAPON: Record<MechId, WeaponKind> = {
 export function drawMechTop(ctx: CanvasRenderingContext2D, id: MechId, flash = 0) {
   ctx.save();
   if (flash > 0) ctx.globalCompositeOperation = "lighter";
-  // every mech uses the shaded-metal SVG art; the code-drawn vault mechs are the fallback
-  if (hasMechArt(id)) drawMechArt(ctx, id);
-  else drawMecha(ctx, id, MECH_WEAPON[id]);
+  // shared by combat and the hangar so the portrait matches the suit on the field
+  drawLineup(ctx, id);
   ctx.restore();
 }
 
@@ -598,11 +597,15 @@ export function drawPortrait(ctx: CanvasRenderingContext2D, id: MechId, w: numbe
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
   ctx.save();
-  ctx.translate(w * 0.5, h * 0.52);
-  // mecha sprites span roughly ±40px incl. weapons/wings; fit with a margin
-  const k = Math.min(w, h) / 92;
+  ctx.translate(w * 0.5, h * 0.54);
+  ctx.fillStyle = "rgba(0,0,0,0.4)";
+  ctx.beginPath();
+  ctx.ellipse(2, 16, 24, 8, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // suits span roughly ±36px including weapons and wings
+  const k = Math.min(w, h) / 96;
   ctx.scale(k, k);
-  ctx.rotate(-0.5);
+  ctx.rotate(-0.35);
   drawMechTop(ctx, id);
   ctx.restore();
   ctx.strokeStyle = "rgba(236,236,232,0.08)";
