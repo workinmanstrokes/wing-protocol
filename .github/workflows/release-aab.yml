@@ -68,6 +68,7 @@ jobs:
           name: WingProtocol-release-aab
           path: WingProtocol-release.aab
           if-no-files-found: error
+          retention-days: 2
       - name: Clean up keystore
         if: always()
         run: rm -f android/app/upload.jks android/keystore.properties
