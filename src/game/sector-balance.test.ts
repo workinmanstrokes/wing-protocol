@@ -13,7 +13,12 @@ test("sector 1 caps the field and ramps smoothly", () => {
   const caps = [0, 20, 40, 60, 80, 100].map((t) => aliveCap(0, t, false));
   assert.deepEqual([caps[0], caps[caps.length - 1]], [5, 12]);
   for (let i = 1; i < caps.length; i++) assert.ok(caps[i]! >= caps[i - 1]!, caps.join(","));
-  assert.ok(aliveCap(0, 60, true) <= 14);
+  assert.equal(aliveCap(0, 100, false), 12);
+  assert.equal(aliveCap(0, 100, true), 12);
+  for (let t = 0; t <= 100; t += 5) {
+    assert.ok(aliveCap(0, t, true) <= 12, `surge cap ${t}`);
+    assert.equal(aliveCap(0, t, true), aliveCap(0, t, false));
+  }
   assert.equal(aliveCap(1, 40, true), 96);
   assert.equal(aliveCap(2, 80, false), 96);
 });
