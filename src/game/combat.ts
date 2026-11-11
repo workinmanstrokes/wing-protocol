@@ -28,6 +28,31 @@ import {
 } from "./render";
 
 const STEP = 1 / 60;
+
+/** One cached ring per rim colour. Drawn with drawImage instead of a fresh arc per enemy. */
+function rimDisc(color: string) {
+  return cachedSprite(`rimdisc:${color}`, 64, (ctx) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(0, 0, 24, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(0, 0, 20, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function eyePip(color: string) {
+  return cachedSprite(`eyepip:${color}`, 16, (ctx) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(0, 0, 6, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
 const MAX_ENEMY = 360;
 const MAX_BULLET = 720;
 const MAX_PICK = 420;
@@ -422,6 +447,8 @@ export class Combat {
   private rootT = 0;
   private wardT = 0;
   private sinceHit = 99;
+  /** Last frame had a crowded view. Cuts sparks, bloom and rim overdraw. */
+  private crowd = false;
   private capHits = 0;
   private aegisT = 0;
   private aegisAng = 0;
@@ -699,6 +726,7 @@ export class Combat {
       skipTo: (t: number) => { this.time = t; },
       god: (v: boolean) => { this.godMode = v; },
       killBosses: () => { for (const m of this.mobs) if (m.alive && m.boss) this.killMob(m, 0, 0); },
+      kill: () => { this.hp = 0; this.finish(false); },
     });
   }
   private godMode = false;
@@ -892,6 +920,9 @@ export class Combat {
       if (this.hp < this.maxHp * ABILITY.cross.mendBelow && this.sinceHit > ABILITY.cross.mendDelay) {
         this.hp = Math.min(this.maxHp, this.hp + dt * this.maxHp * ABILITY.cross.mendFrac);
       }
+    }
+    if (this.mechId === "aether" && this.sinceHit > ABILITY.aether.glideDelay) {
+      this.hp = Math.min(this.maxHp, this.hp + dt * this.maxHp * ABILITY.aether.glideFrac);
     }
 
     this.spawnAcc += dt;
@@ -1847,6 +1878,7 @@ export class Combat {
     if (this.mechId === "storm" && tag === "" && dmg > 0) {
       this.capHits += 1;
       if (this.capHits % ABILITY.storm.every === 0) {
+        this.hp = Math.min(this.maxHp, this.hp + ABILITY.storm.chainHeal);
         const next = this.nearestMobExcept(m, m.x, m.y, ABILITY.storm.chainR);
         if (next) this.hurtMob(next, dmg * ABILITY.storm.chainFrac, 0, false, true, "chain");
       }
@@ -2022,7 +2054,9 @@ export class Combat {
     let dmg = Math.max(0.5, raw - 1.4 * (this.perks.barrier ?? 0));
     if (this.shield > 0) dmg *= 0.2;
     const bulwark = this.mechId === "dune" && this.bulwarkReady;
-    dmg *= incomingDamageMul(this.mechId, { bulwark, brace: this.braceT > 0, ward: this.wardT > 0 });
+    const slip = this.mechId === "kite" && Math.hypot(this.pvx, this.pvy) > (this.base?.speed ?? 1) * ABILITY.kite.slip;
+    const net = this.mechId === "storm" && this.zones.some((z) => z.alive && z.kind === "net");
+    dmg *= incomingDamageMul(this.mechId, { bulwark, brace: this.braceT > 0, ward: this.wardT > 0, slip, net });
     if (bulwark) {
       this.bulwarkReady = false;
       this.bulwarkT = ABILITY.dune.bulwarkCd;
@@ -2056,7 +2090,8 @@ export class Combat {
 
   /** Hit sparks: velocity-stretched streaks plus a few glowing embers. */
   private burst(x: number, y: number, n: number, color: string) {
-    const count = Math.max(1, Math.round(n * PROFILES[this.quality].sparkMul));
+    const crowdMul = this.crowd ? 0.35 : 1;
+    const count = Math.max(1, Math.round(n * PROFILES[this.quality].sparkMul * crowdMul));
     for (let i = 0; i < count; i++) {
       const p = this.allocFx();
       if (!p) return;
@@ -2330,11 +2365,15 @@ export class Combat {
         ctx.globalAlpha = 1;
       }
     }
-    // shadows pass
+    let visible = 0;
+    for (const m of this.mobs) if (m.alive && inView(m.x, m.y, 48)) visible++;
+    this.crowd = visible >= 16;
+    // shadows pass — drop grunt shadows once the screen is full
     if (shadow) {
       ctx.globalAlpha = 0.8;
       for (const m of this.mobs) {
         if (!m.alive || !inView(m.x, m.y, m.r * 2)) continue;
+        if (this.crowd && !m.boss) continue;
         const r = m.r * (m.boss ? 1.9 : 1.5);
         ctx.drawImage(shadow.c, m.x - r + 5, m.y - r * 0.8 + 8, r * 2, r * 1.6);
       }
@@ -2365,28 +2404,18 @@ export class Combat {
       }
       const sc = (m.boss ? (m.kind === "warden" ? 1.5 : 1.35) : m.kind === "crawler" ? 1.15 : 1) * (m.elite ? 1.25 : 1);
       const ang = Math.atan2(this.py - m.y, this.px - m.x);
-      // light disc + rim so the suit reads on dark floor plates
       const rim = enemyRim(m.kind);
-      ctx.save();
-      ctx.fillStyle = rim;
-      ctx.globalAlpha = 0.34;
-      ctx.beginPath();
-      ctx.arc(m.x, m.y, m.r * sc + 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = rim;
-      ctx.lineWidth = m.boss ? 3 : 2.4;
-      ctx.beginPath();
-      ctx.arc(m.x, m.y, m.r * sc + 2, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
+      const disc = rimDisc(rim);
+      const rd = (m.r * sc + 7) * 2.1;
+      ctx.drawImage(disc.c, m.x - rd / 2, m.y - rd / 2, rd, rd);
       const box = MOB_BOX[m.kind] ?? 64;
       const spr = cachedSprite(`mob:${m.kind}`, box, (c) => drawEnemyTop(c, m.kind, 0));
       drawSprite(ctx, spr, m.x, m.y, ang, sc);
-      ctx.fillStyle = rim;
-      ctx.beginPath();
-      ctx.arc(m.x + Math.cos(ang) * m.r * 0.55, m.y + Math.sin(ang) * m.r * 0.55, m.boss ? 4.5 : 3.2, 0, Math.PI * 2);
-      ctx.fill();
+      const pip = eyePip(rim);
+      const ps = m.boss ? 11 : 7;
+      const ex = m.x + Math.cos(ang) * m.r * 0.55;
+      const ey = m.y + Math.sin(ang) * m.r * 0.55;
+      ctx.drawImage(pip.c, ex - ps / 2, ey - ps / 2, ps, ps);
       if (m.flash > 0) {
         // additive white hit-flash (cached glow, no per-frame gradient)
         const g = glowSprite("#ffffff", true);
@@ -2397,8 +2426,7 @@ export class Combat {
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = "source-over";
       }
-      if (bl) {
-        // eye/engine glow per enemy; bosses glow big
+      if (bl && (!this.crowd || m.boss || m.elite)) {
         bl.light(m.x + Math.cos(ang) * m.r * 0.4, m.y + Math.sin(ang) * m.r * 0.4, m.boss ? 46 : 12, m.boss ? "#ff5a3a" : "#ff7a4a", m.boss ? 0.9 : 0.55);
       }
       if (m.boss || m.hp < m.maxHp) {
@@ -2414,7 +2442,7 @@ export class Combat {
     for (const b of this.bullets) {
       if (!b.alive || !inView(b.x, b.y, 30)) continue;
       const spd = Math.hypot(b.vx, b.vy) || 1;
-      if (prof.trails) {
+      if (prof.trails && !this.crowd) {
         const trailLen = Math.min(28, spd * 0.035);
         ctx.strokeStyle = b.color;
         ctx.globalAlpha = b.friendly ? 0.55 : 0.6;
@@ -2428,15 +2456,14 @@ export class Combat {
       const g = glowSprite(b.color, true);
       const r = b.r * (b.friendly ? 2.4 : 3);
       ctx.drawImage(g.c, b.x - r, b.y - r, r * 2, r * 2);
-      if (!b.friendly) {
-        // enemy shots get a dark rim so they read on bright floors
+      if (!b.friendly && !this.crowd) {
         ctx.strokeStyle = "rgba(20,0,0,0.6)";
         ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.arc(b.x, b.y, b.r + 1, 0, Math.PI * 2);
         ctx.stroke();
       }
-      if (bl) bl.light(b.x, b.y, b.r * (b.friendly ? 4.5 : 6), b.color, b.friendly ? 0.35 : 0.8);
+      if (bl && !this.crowd) bl.light(b.x, b.y, b.r * (b.friendly ? 4.5 : 6), b.color, b.friendly ? 0.35 : 0.8);
     }
     for (const r of this.rings) {
       if (!r.alive) continue;
@@ -2662,6 +2689,7 @@ export class Combat {
     // ---- post-processing ----
     if (bl) bl.composite(ctx, 0.7);
     ctx.drawImage(vignette(w, h, prof.grade ? SECTORS[this.sector]!.gradeTint : "", prof.grade), 0, 0, w, h);
+    this.drawEdgeThreats(ctx, camX, camY, w, h);
     if (this.hurtT > 0) {
       ctx.globalAlpha = this.hurtT * 1.2;
       ctx.strokeStyle = "#ff3a2a";
@@ -2721,6 +2749,52 @@ export class Combat {
         ctx.stroke();
         ctx.setLineDash([]);
       }
+      ctx.restore();
+    }
+  }
+
+  /** Chevrons for hulls clipped by the view, with a brighter mark for walkers. */
+  private drawEdgeThreats(ctx: CanvasRenderingContext2D, camX: number, camY: number, w: number, h: number) {
+    const inset = 16;
+    const band = 72;
+    const marks: { sx: number; sy: number; d: number; kind: string; boss: boolean; off: boolean }[] = [];
+    for (const m of this.mobs) {
+      if (!m.alive || m.kind === "swarm") continue;
+      const sx = w / 2 + (m.x - camX);
+      const sy = h / 2 + (m.y - camY);
+      const off = sx < 0 || sx > w || sy < 0 || sy > h;
+      const near = sx < band || sx > w - band || sy < band || sy > h - band;
+      if (!off && !near) continue;
+      const d = Math.hypot(m.x - this.px, m.y - this.py);
+      if (!m.boss && d > 700) continue;
+      marks.push({ sx, sy, d, kind: m.kind, boss: m.boss, off });
+    }
+    marks.sort((a, b) => a.d - b.d);
+    const n = Math.min(6, marks.length);
+    for (let i = 0; i < n; i++) {
+      const t = marks[i]!;
+      const walker = t.kind === "walker" || t.kind === "crawler";
+      let ex = Math.max(inset, Math.min(w - inset, t.sx));
+      let ey = Math.max(inset, Math.min(h - inset, t.sy));
+      // keep marks off the top readout and the top-right minimap
+      if (ey < 88) ey = 88;
+      if (ex > w - 130 && ey < 220) ey = 224;
+      const ang = Math.atan2(t.sy - h / 2, t.sx - w / 2);
+      ctx.save();
+      ctx.translate(ex, ey);
+      ctx.rotate(ang);
+      const s = t.boss ? 15 : walker ? 13 : 9;
+      ctx.fillStyle = enemyRim(t.kind);
+      ctx.globalAlpha = walker || t.boss ? 0.96 : 0.78;
+      ctx.beginPath();
+      ctx.moveTo(s, 0);
+      ctx.lineTo(-s * 0.65, s * 0.55);
+      ctx.lineTo(-s * 0.65, -s * 0.55);
+      ctx.closePath();
+      ctx.fill();
+      ctx.lineWidth = walker || t.boss ? 2 : 1.2;
+      ctx.strokeStyle = "#0c0e14";
+      ctx.stroke();
       ctx.restore();
     }
   }
@@ -2935,6 +3009,7 @@ declare global {
       spawn?: (n: number) => void;
       skipTo?: (t: number) => void;
       god?: (v: boolean) => void;
+      kill?: () => void;
       setQuality?: (v: "auto" | "high" | "low") => void;
     };
   }

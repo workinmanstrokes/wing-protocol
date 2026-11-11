@@ -15,7 +15,7 @@ export const MECHS: MechDef[] = [
     unlockCost: 0,
     color: "#e8eef2",
     accent: "#5ec8e8",
-    stats: { hp: 92, speed: 248, fireRate: 5.4, damage: 16, range: 520 },
+    stats: { hp: 124, speed: 248, fireRate: 5.4, damage: 16, range: 520 },
     weapon: "beam",
     skill: {
       name: "Needle Lance",
@@ -24,7 +24,7 @@ export const MECHS: MechDef[] = [
     },
     passive: {
       name: "Glass Optics",
-      desc: "Weapon yield +12%. You take 8% more hull damage.",
+      desc: "Weapon yield +12%. After 1.6s without a hit, hull repairs at 2.8% per second.",
     },
     handling: { accel: 13, brake: 3.2 },
   },
@@ -120,7 +120,7 @@ export const MECHS: MechDef[] = [
     unlockCost: 2500,
     color: "#c8d8f0",
     accent: "#ff3a7a",
-    stats: { hp: 104, speed: 214, fireRate: 3.8, damage: 11, range: 320 },
+    stats: { hp: 128, speed: 214, fireRate: 3.8, damage: 11, range: 320 },
     weapon: "arc",
     skill: {
       name: "Static Net",
@@ -129,7 +129,7 @@ export const MECHS: MechDef[] = [
     },
     passive: {
       name: "Capacitor",
-      desc: "Every 5th hit jumps to a nearby hull.",
+      desc: "Every 5th hit jumps to a nearby hull and restores 3 hull. Inside your Static Net you take 16% less damage.",
     },
     handling: { accel: 10, brake: 7 },
   },
@@ -232,7 +232,7 @@ export const MECHS: MechDef[] = [
     unlockCost: 0,
     color: "#3a6ea8",
     accent: "#ff5a8a",
-    stats: { hp: 96, speed: 262, fireRate: 2.2, damage: 18, range: 340 },
+    stats: { hp: 122, speed: 262, fireRate: 2.2, damage: 18, range: 340 },
     weapon: "tether",
     skill: {
       name: "Ribbon Line",
@@ -241,7 +241,7 @@ export const MECHS: MechDef[] = [
     },
     passive: {
       name: "Slipstream",
-      desc: "Near top speed, your fire interval is 14% shorter.",
+      desc: "Near top speed, fire interval −14% and incoming damage −18%.",
     },
     handling: { accel: 16, brake: 10 },
   },
