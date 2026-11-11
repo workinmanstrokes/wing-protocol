@@ -64,11 +64,14 @@ test("fragile suits outlast a careful sector 1 without catching the vanguard", (
   const hp = Object.fromEntries(MECHS.map((m) => [m.id, m.stats.hp]));
   assert.ok(hp.aether >= 118 && hp.aether < hp.dune);
   assert.ok(hp.storm >= 120 && hp.storm < hp.dune);
-  assert.ok(hp.kite >= 116 && hp.kite < hp.dune);
+  assert.ok(hp.kite >= 130 && hp.kite > hp.aether && hp.kite < hp.dune);
   assert.equal(ABILITY.aether.takenMul, 1);
   assert.ok(ABILITY.aether.glideFrac >= 0.02);
   assert.equal(incomingDamageMul("kite", { bulwark: false, brace: false, ward: false }), 1);
-  assert.ok(incomingDamageMul("kite", { bulwark: false, brace: false, ward: false, slip: true }) <= 0.85);
+  assert.ok(incomingDamageMul("kite", { bulwark: false, brace: false, ward: false, slip: true }) <= 0.7);
+  assert.ok(ABILITY.kite.slip <= 0.5, "slipstream engages while kiting, not only at top speed");
+  assert.ok(ABILITY.kite.buffer >= 10);
+  assert.ok(ABILITY.kite.iFrame >= 0.3);
   assert.equal(incomingDamageMul("storm", { bulwark: false, brace: false, ward: false }), 1);
   assert.ok(incomingDamageMul("storm", { bulwark: false, brace: false, ward: false, net: true }) <= 0.86);
 });

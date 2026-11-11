@@ -232,7 +232,7 @@ export const MECHS: MechDef[] = [
     unlockCost: 0,
     color: "#3a6ea8",
     accent: "#ff5a8a",
-    stats: { hp: 122, speed: 262, fireRate: 2.2, damage: 18, range: 340 },
+    stats: { hp: 136, speed: 262, fireRate: 2.2, damage: 18, range: 340 },
     weapon: "tether",
     skill: {
       name: "Ribbon Line",
@@ -241,7 +241,7 @@ export const MECHS: MechDef[] = [
     },
     passive: {
       name: "Slipstream",
-      desc: "Near top speed, fire interval −14% and incoming damage −18%.",
+      desc: "While moving, fire interval −14% and incoming damage −36%. The first hit each few seconds is cut by 12 more. Stop, and both drop.",
     },
     handling: { accel: 16, brake: 10 },
   },

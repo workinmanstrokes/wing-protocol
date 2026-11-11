@@ -16,13 +16,23 @@ import {
 } from "./abilities";
 import { mechArtVersion } from "./mech-art";
 import { PACE_EVENTS, paceMultiplier, sectorLayout, type ObstacleKind } from "./levels";
+import { clampThreatMark, minimapCenter } from "./hud-layout";
+import {
+  aliveCap,
+  baseSpawnInterval,
+  randomEliteChance,
+  sectorIncomingMul,
+  swarmExtras,
+  trashKind,
+  TRASH_STATS,
+} from "./sector-balance";
 import type { GearItem, HudState, MechId, PerkId, RunResult } from "./types";
 import type { SaveData } from "./types";
 import { SLOTS, applyGear } from "./meta/gear";
 import { BASE_CONFIG, type BossKind, type RunConfig } from "./meta/modes";
 
 import {
-  BloomLayer, FpsGovernor, PROFILES, cachedSprite, drawSprite, floorTile, getQualityPref, glowSprite,
+  BloomLayer, FpsGovernor, PROFILES, cachedSprite, drawSprite, drawSpriteFast, floorTile, getQualityPref, glowSprite,
   setQualityPref, shadowSprite, softSprite, vignette, withAlpha,
   type Quality, type QualityPref,
 } from "./render";
@@ -362,6 +372,17 @@ export class Combat {
   private spawnAcc = 0;
   private paceIdx = 0;
   private surgeT = 0;
+  private aliveTrash = 0;
+  private aliveElites = 0;
+  private kiteBufferReady = true;
+  private kiteBufferT = 0;
+  private kiteFast = false;
+  private hitSfxT = 0;
+  private buckets = new Map<number, Mob[]>();
+  private bucketKeys: number[] = [];
+  private sparkQueue: Fx[] = [];
+  private sparkGroups = new Map<string, Fx[]>();
+  private sparkKeys: string[] = [];
   private nextBossAt = 48;
   private reduced = false;
   private wrecks: Wreck[] = [];
@@ -541,10 +562,13 @@ export class Combat {
       if (this.time - e.t > 3) continue; // skipped over (debug skipTo): don't burst-spawn
       if (e.kind === "elite") {
         const kind = this.sector === 0 ? "walker" : this.sector === 1 ? "sniper" : "crawler";
-        const m = this.spawnMob(false, kind);
+        const m = this.spawnMob(false, kind, undefined, true);
         if (m) {
-          this.makeElite(m, ELITE_MODS[this.paceIdx % ELITE_MODS.length]!);
-          this.announce("ELITE SIGNAL", 1.6);
+          // Sector 1 keeps a single elite on the field so two beats cannot stack.
+          if (this.sector > 0 || this.aliveElites < 1) {
+            this.makeElite(m, ELITE_MODS[this.paceIdx % ELITE_MODS.length]!);
+            this.announce("ELITE SIGNAL", 1.6);
+          }
         }
       } else {
         this.surgeT = e.dur ?? 8;
@@ -620,10 +644,27 @@ export class Combat {
   }
 
   private makeElite(m: Mob, mod: string) {
+    if (!m.elite) this.aliveElites += 1;
     m.elite = mod;
     m.hp *= 3.2; m.r *= 1.25; m.xp *= 5; m.dmg *= 1.25;
     if (mod === "swift") { m.speed *= 1.6; m.baseSpeed = m.speed; }
     m.maxHp = m.hp;
+  }
+
+  private rebuildBuckets() {
+    for (let i = 0; i < this.bucketKeys.length; i++) this.buckets.get(this.bucketKeys[i]!)!.length = 0;
+    this.bucketKeys.length = 0;
+    for (const m of this.mobs) {
+      if (!m.alive) continue;
+      const k = hash(m.x, m.y);
+      let b = this.buckets.get(k);
+      if (!b) {
+        b = [];
+        this.buckets.set(k, b);
+      }
+      if (b.length === 0) this.bucketKeys.push(k);
+      b.push(m);
+    }
   }
 
   private resize = () => {
@@ -723,6 +764,14 @@ export class Combat {
     if (!(import.meta.env.DEV || location.search.includes("debug"))) return;
     Object.assign(window.__controlsTest, {
       spawn: (n: number) => { for (let i = 0; i < n; i++) this.spawnMob(false); },
+      spawnOffset: (dx: number, dy: number, kind?: string) => {
+        this.spawnMob(false, kind ?? "walker", { x: this.px + dx, y: this.py + dy }, true);
+      },
+      setCombo: (n: number) => {
+        this.comboCount = Math.max(0, n);
+        this.comboTimer = n > 0 ? 8 : 0;
+        this.pushHud();
+      },
       skipTo: (t: number) => { this.time = t; },
       god: (v: boolean) => { this.godMode = v; },
       killBosses: () => { for (const m of this.mobs) if (m.alive && m.boss) this.killMob(m, 0, 0); },
@@ -924,6 +973,14 @@ export class Combat {
     if (this.mechId === "aether" && this.sinceHit > ABILITY.aether.glideDelay) {
       this.hp = Math.min(this.maxHp, this.hp + dt * this.maxHp * ABILITY.aether.glideFrac);
     }
+    if (this.mechId === "kite") {
+      this.kiteFast = Math.hypot(this.pvx, this.pvy) > (this.base?.speed ?? 1) * ABILITY.kite.slip;
+      if (this.kiteFast && !this.kiteBufferReady) {
+        this.kiteBufferT -= dt;
+        if (this.kiteBufferT <= 0) this.kiteBufferReady = true;
+      }
+    }
+    if (this.hitSfxT > 0) this.hitSfxT -= dt;
 
     this.spawnAcc += dt;
     const intensity = this.progress();
@@ -932,14 +989,19 @@ export class Combat {
     const pace = this.cfg.scripted
       ? paceMultiplier(this.time, { bossAlive, uplinkActive: this.uplink.active })
       : bossAlive ? 0.7 : 1;
-    const interval = Math.max(0.12, 0.85 - intensity * 0.68) / (pace * this.cfg.spawnRate);
+    const interval = baseSpawnInterval(intensity, this.sector) / (pace * this.cfg.spawnRate);
     if (this.cfg.scripted) this.runPaceEvents();
     this.updateSkills(dt);
     this.updateZones(dt);
     if (this.surgeT > 0) this.surgeT -= dt;
+    const cap = aliveCap(this.sector, this.time, this.surgeT > 0);
     while (this.spawnAcc >= interval) {
       this.spawnAcc -= interval;
-      const n = 1 + (intensity > 0.4 ? 1 : 0) + (intensity > 0.75 ? 1 : 0);
+      if (this.aliveTrash >= cap) {
+        this.spawnAcc = 0;
+        break;
+      }
+      const n = this.sector > 0 ? 1 + (intensity > 0.4 ? 1 : 0) + (intensity > 0.75 ? 1 : 0) : 1;
       for (let i = 0; i < n; i++) this.spawnMob(false);
     }
     if (this.cfg.scripted) {
@@ -1282,6 +1344,7 @@ export class Combat {
       const fromX = this.px;
       const fromY = this.py;
       this.invuln = Math.max(this.invuln, A.iFrame);
+      this.kiteBufferReady = true;
       const dest = this.clampWorld(this.px + ux * A.dash, this.py + uy * A.dash);
       this.px = dest.x;
       this.py = dest.y;
@@ -1379,9 +1442,11 @@ export class Combat {
     });
   }
 
-  private spawnMob(boss: boolean, kindOverride?: string, at?: { x: number; y: number }): Mob | undefined {
+  private spawnMob(boss: boolean, kindOverride?: string, at?: { x: number; y: number }, force = false): Mob | undefined {
+    if (!boss && !force && this.aliveTrash >= aliveCap(this.sector, this.time, this.surgeT > 0)) return undefined;
     const m = this.mobs.find((x) => !x.alive);
     if (!m) return undefined;
+    if (!boss) this.aliveTrash += 1;
     const ang = Math.random() * Math.PI * 2;
     const dist = 520 + Math.random() * 180;
     m.x = at ? at.x : this.px + Math.cos(ang) * dist;
@@ -1411,32 +1476,20 @@ export class Combat {
     } else {
       let kind = kindOverride;
       if (!kind) {
-        const r = Math.random();
-        const sec = this.sector;
-        if (sec === 0) kind = t > 0.12 && r < 0.18 ? "swarm" : t > 0.2 && r < 0.42 ? "walker" : r < 0.5 && t > 0.25 ? "charger" : "drone";
-        else if (sec === 1) kind = r < 0.16 ? "swarm" : r < 0.3 ? "charger" : r < 0.42 ? "sniper" : r < 0.6 ? "walker" : r < 0.68 ? "shielder" : "drone";
-        else kind = r < 0.14 ? "swarm" : r < 0.26 ? "charger" : r < 0.38 ? "sniper" : r < 0.5 ? "shielder" : r < 0.66 ? "crawler" : r < 0.8 ? "walker" : "drone";
+        kind = trashKind(this.sector, this.time, t, Math.random());
         if (kind === "swarm") {
-          for (let i = 0; i < 5; i++) this.spawnMob(false, "swarm", { x: m.x + (Math.random() - 0.5) * 60, y: m.y + (Math.random() - 0.5) * 60 });
+          const extra = swarmExtras(this.sector, this.time);
+          for (let i = 0; i < extra; i++) this.spawnMob(false, "swarm", { x: m.x + (Math.random() - 0.5) * 60, y: m.y + (Math.random() - 0.5) * 60 });
         }
       }
       m.kind = kind;
-      const S: Record<string, [number, number, number, number, number, number]> = {
-        // r, hp, speed, dmg, xp, fireCd
-        drone: [12, 14, 118 + t * 40, 8, 1, 99],
-        walker: [16, 32, 86, 12, 3, 1.8],
-        crawler: [22, 70, 58, 18, 8, 2.4],
-        swarm: [8, 6, 168 + t * 30, 5, 1, 99],
-        charger: [15, 40, 70, 16, 4, 99],
-        sniper: [14, 26, 96, 10, 5, 2.6],
-        shielder: [18, 46, 64, 14, 7, 99],
-      };
-      const d = S[kind] ?? S.drone!;
-      m.r = d[0]; m.hp = d[1] * scale; m.speed = d[2]; m.dmg = d[3] * (1 + t * 1.1); m.xp = d[4]; m.fireCd = d[5];
+      const d = TRASH_STATS[kind as keyof typeof TRASH_STATS] ?? TRASH_STATS.drone;
+      const speed = kind === "drone" ? 118 + t * 40 : kind === "swarm" ? 168 + t * 30 : d[2];
+      m.r = d[0]; m.hp = d[1] * scale; m.speed = speed; m.dmg = d[3] * (1 + t * 1.1); m.xp = d[4]; m.fireCd = d[5];
       if (kind === "charger") m.special = 1.5 + Math.random() * 2;
       if (kind === "shielder") { m.shieldMax = 50 * scale; m.shieldHp = m.shieldMax; }
-      const eliteChance = t < 0.15 ? 0 : 0.05 + t * 0.14;
-      if (kind !== "swarm" && Math.random() < eliteChance) {
+      const eliteChance = randomEliteChance(this.sector, t);
+      if (!kindOverride && kind !== "swarm" && this.aliveElites < (this.sector === 0 ? 1 : 4) && Math.random() < eliteChance) {
         m.elite = ELITE_MODS[Math.floor(Math.random() * ELITE_MODS.length)]!;
         m.hp *= 3.2; m.r *= 1.25; m.xp *= 5; m.dmg *= 1.25;
         if (m.elite === "swift") m.speed *= 1.6;
@@ -1460,6 +1513,7 @@ export class Combat {
     m.telegraph = 0;
     m.dashT = 0;
     if (!boss && m.kind !== "charger") m.special = 0;
+    if (m.elite) this.aliveElites += 1;
     return m;
   }
 
@@ -1558,17 +1612,8 @@ export class Combat {
   }
 
   private updateMobs(dt: number, _ax: number, _ay: number) {
-    const buckets = new Map<number, Mob[]>();
-    for (const m of this.mobs) {
-      if (!m.alive) continue;
-      const k = hash(m.x, m.y);
-      let b = buckets.get(k);
-      if (!b) {
-        b = [];
-        buckets.set(k, b);
-      }
-      b.push(m);
-    }
+    this.rebuildBuckets();
+    const buckets = this.buckets;
     for (const m of this.mobs) {
       if (!m.alive) continue;
       m.flash = Math.max(0, m.flash - dt * 6);
@@ -1755,6 +1800,7 @@ export class Combat {
   }
 
   private updateBullets(dt: number) {
+    this.rebuildBuckets();
     for (const b of this.bullets) {
       if (!b.alive) continue;
       if (b.homing > 0 && b.friendly) {
@@ -1796,7 +1842,14 @@ export class Combat {
         continue;
       }
       if (b.friendly) {
-        for (const m of this.mobs) {
+        const cx = Math.floor(b.x / CELL);
+        const cy = Math.floor(b.y / CELL);
+        let hit = false;
+        for (let ox = -1; ox <= 1 && !hit; ox++) {
+          for (let oy = -1; oy <= 1 && !hit; oy++) {
+            const list = this.buckets.get((cx + ox) * 73856093 ^ (cy + oy) * 19349663);
+            if (!list) continue;
+            for (const m of list) {
           if (!m.alive) continue;
           const dx = m.x - b.x;
           const dy = m.y - b.y;
@@ -1817,13 +1870,17 @@ export class Combat {
                 b.alive = false;
           b.ret = 0;
               }
+              hit = true;
               break;
             }
             b.pierce -= 1;
             if (b.pierce < 0) {
               b.alive = false;
           b.ret = 0;
+              hit = true;
               break;
+            }
+          }
             }
           }
         }
@@ -1890,13 +1947,23 @@ export class Combat {
       this.novaQueue.push(m.x, m.y, dmg * 0.7, 64);
     }
     if (m.hp <= 0) this.killMob(m, explode, dmg);
-    else if (!quiet) this.audio.hit();
+    else if (!quiet) {
+      if (this.crowd && this.hitSfxT > 0) {
+        /* crowded fights keep one hit voice, not a new graph node every bullet */
+      } else {
+        this.audio.hit();
+        if (this.crowd) this.hitSfxT = 0.09;
+      }
+    }
   }
 
   private novaQueue: number[] = [];
 
   private killMob(m: Mob, explode: number, dmg: number) {
+    if (!m.alive) return;
     m.alive = false;
+    if (!m.boss) this.aliveTrash = Math.max(0, this.aliveTrash - 1);
+    if (m.elite) this.aliveElites = Math.max(0, this.aliveElites - 1);
     this.kills += 1;
     if (this.mechId === "scythe") this.tempoT = ABILITY.scythe.tempo;
     this.registerCombo();
@@ -2054,9 +2121,15 @@ export class Combat {
     let dmg = Math.max(0.5, raw - 1.4 * (this.perks.barrier ?? 0));
     if (this.shield > 0) dmg *= 0.2;
     const bulwark = this.mechId === "dune" && this.bulwarkReady;
-    const slip = this.mechId === "kite" && Math.hypot(this.pvx, this.pvy) > (this.base?.speed ?? 1) * ABILITY.kite.slip;
+    const slip = this.mechId === "kite" && this.kiteFast;
     const net = this.mechId === "storm" && this.zones.some((z) => z.alive && z.kind === "net");
     dmg *= incomingDamageMul(this.mechId, { bulwark, brace: this.braceT > 0, ward: this.wardT > 0, slip, net });
+    dmg *= sectorIncomingMul(this.sector, this.time);
+    if (slip && this.kiteBufferReady) {
+      dmg = Math.max(0, dmg - ABILITY.kite.buffer);
+      this.kiteBufferReady = false;
+      this.kiteBufferT = ABILITY.kite.bufferCd;
+    }
     if (bulwark) {
       this.bulwarkReady = false;
       this.bulwarkT = ABILITY.dune.bulwarkCd;
@@ -2114,7 +2187,7 @@ export class Combat {
   private explodeFx(x: number, y: number, size: number, color: string) {
     const prof = PROFILES[this.quality];
     this.burst(x, y, 6 + size * 0.5, color);
-    const debris = Math.round((2 + size * 0.15) * prof.sparkMul);
+    const debris = Math.round((2 + size * 0.15) * prof.sparkMul * (this.crowd ? 0.45 : 1));
     for (let i = 0; i < debris; i++) {
       const p = this.allocFx();
       if (!p) break;
@@ -2126,7 +2199,7 @@ export class Combat {
       p.life = 0.5 + Math.random() * 0.5; p.max = p.life;
       p.size = 2 + Math.random() * 3; p.color = "#4a4440";
     }
-    if (prof.smoke) {
+    if (prof.smoke && !this.crowd) {
       for (let i = 0; i < 2 + size * 0.08; i++) {
         const p = this.allocFx();
         if (!p) break;
@@ -2195,6 +2268,7 @@ export class Combat {
   }
 
   private spawnFloat(x: number, y: number, text: string, color: string, crit = false) {
+    if (this.crowd && !crit && color !== "#ff6a5c") return;
     const f = this.floats.find((q) => !q.alive);
     if (!f) return;
     f.alive = true;
@@ -2367,7 +2441,7 @@ export class Combat {
     }
     let visible = 0;
     for (const m of this.mobs) if (m.alive && inView(m.x, m.y, 48)) visible++;
-    this.crowd = visible >= 16;
+    this.crowd = visible >= 12;
     // shadows pass — drop grunt shadows once the screen is full
     if (shadow) {
       ctx.globalAlpha = 0.8;
@@ -2410,13 +2484,15 @@ export class Combat {
       ctx.drawImage(disc.c, m.x - rd / 2, m.y - rd / 2, rd, rd);
       const box = MOB_BOX[m.kind] ?? 64;
       const spr = cachedSprite(`mob:${m.kind}`, box, (c) => drawEnemyTop(c, m.kind, 0));
-      drawSprite(ctx, spr, m.x, m.y, ang, sc);
-      const pip = eyePip(rim);
-      const ps = m.boss ? 11 : 7;
-      const ex = m.x + Math.cos(ang) * m.r * 0.55;
-      const ey = m.y + Math.sin(ang) * m.r * 0.55;
-      ctx.drawImage(pip.c, ex - ps / 2, ey - ps / 2, ps, ps);
-      if (m.flash > 0) {
+      drawSpriteFast(ctx, spr, m.x, m.y, ang, sc);
+      if (!this.crowd || m.boss || m.elite) {
+        const pip = eyePip(rim);
+        const ps = m.boss ? 11 : 7;
+        const ex = m.x + Math.cos(ang) * m.r * 0.55;
+        const ey = m.y + Math.sin(ang) * m.r * 0.55;
+        ctx.drawImage(pip.c, ex - ps / 2, ey - ps / 2, ps, ps);
+      }
+      if (m.flash > 0 && (!this.crowd || m.boss || m.elite)) {
         // additive white hit-flash (cached glow, no per-frame gradient)
         const g = glowSprite("#ffffff", true);
         ctx.globalCompositeOperation = "lighter";
@@ -2454,7 +2530,7 @@ export class Combat {
         ctx.globalAlpha = 1;
       }
       const g = glowSprite(b.color, true);
-      const r = b.r * (b.friendly ? 2.4 : 3);
+      const r = b.r * (b.friendly ? 2.4 : 3) * (this.crowd ? 0.82 : 1);
       ctx.drawImage(g.c, b.x - r, b.y - r, r * 2, r * 2);
       if (!b.friendly && !this.crowd) {
         ctx.strokeStyle = "rgba(20,0,0,0.6)";
@@ -2496,13 +2572,17 @@ export class Combat {
       if (!p.alive || p.kind === 2 || !inView(p.x, p.y, 20)) continue;
       const a = p.life / p.max;
       if (p.kind === 0) {
-        ctx.globalAlpha = a;
-        ctx.strokeStyle = p.color;
-        ctx.lineWidth = p.size;
-        ctx.beginPath();
-        ctx.moveTo(p.x, p.y);
-        ctx.lineTo(p.x - p.vx * 0.04, p.y - p.vy * 0.04);
-        ctx.stroke();
+        if (this.crowd) {
+          this.sparkQueue.push(p);
+        } else {
+          ctx.globalAlpha = a;
+          ctx.strokeStyle = p.color;
+          ctx.lineWidth = p.size;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x - p.vx * 0.04, p.y - p.vy * 0.04);
+          ctx.stroke();
+        }
       } else if (p.kind === 1) {
         const g = glowSprite(p.color, true);
         ctx.globalAlpha = a;
@@ -2513,6 +2593,10 @@ export class Combat {
         ctx.drawImage(g.c, p.x - r, p.y - r, r * 2, r * 2);
         ctx.globalCompositeOperation = "source-over";
         if (bl) bl.light(p.x, p.y, big ? p.size * 1.4 : r * 2.2, p.color, a * (big ? 0.6 : 0.8));
+      } else if (this.crowd) {
+        ctx.globalAlpha = Math.min(1, a * 1.5);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x - p.size * 0.5, p.y - p.size * 0.35, p.size, p.size * 0.7);
       } else {
         ctx.globalAlpha = Math.min(1, a * 1.5);
         ctx.fillStyle = p.color;
@@ -2522,6 +2606,10 @@ export class Combat {
         ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.7);
         ctx.restore();
       }
+    }
+    if (this.sparkQueue.length) {
+      this.drawSparkBatch(ctx);
+      this.sparkQueue.length = 0;
     }
     ctx.globalAlpha = 1;
     // per-mech booster flames at the sprite's thruster ports (pattern + colour per mech)
@@ -2550,8 +2638,8 @@ export class Combat {
       ctx.drawImage(flameCol.c, tx - r * 1.4, ty - r * 1.4, r * 2.8, r * 2.8);
       ctx.globalAlpha = 0.9;
       ctx.drawImage(flameCore.c, wx - r * 0.5, wy - r * 0.5, r, r);
-      if (bl) bl.light(tx, ty, r * 2.6, boost.color, 0.5 + 0.4 * k);
-      if (prof.trails && moveSpd > 20 && Math.random() < 0.35) {
+      if (bl && !this.crowd) bl.light(tx, ty, r * 2.6, boost.color, 0.5 + 0.4 * k);
+      if (prof.trails && !this.crowd && moveSpd > 20 && Math.random() < 0.35) {
         const p = this.allocFx();
         if (p) {
           p.alive = true; p.kind = 1; p.x = tx; p.y = ty;
@@ -2569,6 +2657,13 @@ export class Combat {
     ctx.save();
     ctx.translate(this.px, this.py);
     ctx.rotate(this.aim);
+    if (this.mechId === "kite" && this.kiteBufferReady) {
+      ctx.strokeStyle = this.kiteFast ? "rgba(255,90,138,0.85)" : "rgba(255,90,138,0.35)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 30, -0.8, 0.8);
+      ctx.stroke();
+    }
     if (this.shield > 0) {
       ctx.strokeStyle = "rgba(197,205,214,0.7)";
       ctx.lineWidth = 3;
@@ -2753,9 +2848,37 @@ export class Combat {
     }
   }
 
+  /** One stroke per spark colour when the fight is crowded. Same streaks, far fewer draw calls. */
+  private drawSparkBatch(ctx: CanvasRenderingContext2D) {
+    for (let i = 0; i < this.sparkKeys.length; i++) this.sparkGroups.get(this.sparkKeys[i]!)!.length = 0;
+    this.sparkKeys.length = 0;
+    for (const p of this.sparkQueue) {
+      let g = this.sparkGroups.get(p.color);
+      if (!g) {
+        g = [];
+        this.sparkGroups.set(p.color, g);
+      }
+      if (g.length === 0) this.sparkKeys.push(p.color);
+      g.push(p);
+    }
+    ctx.lineCap = "round";
+    ctx.globalAlpha = 0.9;
+    for (let i = 0; i < this.sparkKeys.length; i++) {
+      const g = this.sparkGroups.get(this.sparkKeys[i]!)!;
+      if (!g.length) continue;
+      ctx.beginPath();
+      ctx.strokeStyle = g[0]!.color;
+      ctx.lineWidth = g[0]!.size;
+      for (const p of g) {
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - p.vx * 0.04, p.y - p.vy * 0.04);
+      }
+      ctx.stroke();
+    }
+  }
+
   /** Chevrons for hulls clipped by the view, with a brighter mark for walkers. */
   private drawEdgeThreats(ctx: CanvasRenderingContext2D, camX: number, camY: number, w: number, h: number) {
-    const inset = 16;
     const band = 72;
     const marks: { sx: number; sy: number; d: number; kind: string; boss: boolean; off: boolean }[] = [];
     for (const m of this.mobs) {
@@ -2774,12 +2897,21 @@ export class Combat {
     for (let i = 0; i < n; i++) {
       const t = marks[i]!;
       const walker = t.kind === "walker" || t.kind === "crawler";
-      let ex = Math.max(inset, Math.min(w - inset, t.sx));
-      let ey = Math.max(inset, Math.min(h - inset, t.sy));
-      // keep marks off the top readout and the top-right minimap
-      if (ey < 88) ey = 88;
-      if (ex > w - 130 && ey < 220) ey = 224;
       const ang = Math.atan2(t.sy - h / 2, t.sx - w / 2);
+      const clamped = clampThreatMark(t.sx, t.sy, w, h);
+      let ex = clamped.x;
+      let ey = clamped.y;
+      for (let j = 0; j < i; j++) {
+        const prev = marks[j]!;
+        if ((ex - prev.sx) ** 2 + (ey - prev.sy) ** 2 < 18 * 18) {
+          const tangent = Math.atan2(ey - h / 2, ex - w / 2) + Math.PI / 2;
+          const nudged = clampThreatMark(ex + Math.cos(tangent) * 20, ey + Math.sin(tangent) * 20, w, h);
+          ex = nudged.x;
+          ey = nudged.y;
+        }
+      }
+      t.sx = ex;
+      t.sy = ey;
       ctx.save();
       ctx.translate(ex, ey);
       ctx.rotate(ang);
@@ -2867,10 +2999,10 @@ export class Combat {
   }
 
   private drawMinimap(ctx: CanvasRenderingContext2D, w: number) {
-    const size = 100;
-    const margin = 14;
-    const cx = w - size / 2 - margin;
-    const cy = size / 2 + margin + 82;
+    const mm = minimapCenter(w);
+    const size = mm.r * 2;
+    const cx = mm.cx;
+    const cy = mm.cy;
     const range = 900;
     const scale = size / 2 / range;
     ctx.save();

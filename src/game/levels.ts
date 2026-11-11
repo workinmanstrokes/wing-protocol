@@ -78,7 +78,7 @@ export type PaceEvent = { t: number; kind: "elite" | "surge"; dur?: number };
  * uplinks at 40/140/228 — events are placed so they never stack on top of them.
  */
 export const PACE_EVENTS: PaceEvent[] = [
-  { t: 22, kind: "elite" },
+  { t: 48, kind: "elite" },
   { t: 58, kind: "surge", dur: 9 },
   { t: 72, kind: "elite" },
   { t: 118, kind: "elite" },
@@ -100,7 +100,10 @@ export function paceMultiplier(time: number, opts: { bossAlive: boolean; uplinkA
   let k = 1;
   if (time >= 100 && s < 7) k = 0.45; // relax after sector change
   for (const e of PACE_EVENTS) {
-    if (e.kind === "surge" && time >= e.t && time < e.t + (e.dur ?? 8)) k = Math.max(k, 2.2);
+    if (e.kind === "surge" && time >= e.t && time < e.t + (e.dur ?? 8)) {
+      // Sector 1's first surge is a swell, not a doubling. Later surges stay sharp.
+      k = Math.max(k, time < 100 ? 1.4 : 2.2);
+    }
   }
   if (opts.bossAlive) k *= 0.6;
   if (opts.uplinkActive) k *= 1.25; // risk while you hold the zone, reward on capture

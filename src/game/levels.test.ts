@@ -27,8 +27,9 @@ test("pacing: lull after sector change, surge, boss damping", () => {
   const base = { bossAlive: false, uplinkActive: false };
   assert.equal(paceMultiplier(10, base), 1);
   assert.ok(paceMultiplier(102, base) < 0.5);
-  assert.ok(paceMultiplier(60, base) > 2);
-  assert.ok(paceMultiplier(60, { bossAlive: true, uplinkActive: false }) < 2);
+  assert.ok(paceMultiplier(60, base) > 1.2 && paceMultiplier(60, base) < 1.6, "sector 1 surge is a swell");
+  assert.ok(paceMultiplier(160, base) > 2, "later surges stay sharp");
+  assert.ok(paceMultiplier(60, { bossAlive: true, uplinkActive: false }) < 1.2);
 });
 
 test("pace events never collide with bosses or uplinks", () => {

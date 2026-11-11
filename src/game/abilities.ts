@@ -16,7 +16,7 @@ export const ABILITY = {
   cross: { ward: 3.2, wardMul: 0.72, healFrac: 0.12, mendDelay: 2, mendFrac: 0.016, mendBelow: 0.5 },
   moth: { lure: 2.6, lureReach: 150, lureR: 168, lureBurst: 86, lureDmg: 3.2, wakeR: 78, wakeSlow: 0.78 },
   kiln: { seal: 2.1, sealMul: 0.62, scorchR: 70, scorchTick: 0.4, scorchDmg: 0.7, thornR: 52, thornFrac: 0.18 },
-  kite: { dash: 150, iFrame: 0.22, line: 2.2, lineR: 16, lineTick: 0.2, lineDmg: 0.55, slip: 0.72, slipMul: 0.86, slipDr: 0.82 },
+  kite: { dash: 150, iFrame: 0.36, line: 2.2, lineR: 16, lineTick: 0.2, lineDmg: 0.55, slip: 0.48, slipMul: 0.86, slipDr: 0.64, buffer: 12, bufferCd: 3.4 },
 } as const;
 
 export function rosterIds(): MechId[] {
