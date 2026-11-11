@@ -414,14 +414,9 @@ function HudOverlay({
           <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-elevated">
             <div className="h-full bg-xp" style={{ width: `${Math.max(0, xp) * 100}%` }} />
           </div>
-          <p className="mt-1 font-mono text-xs tabular-nums text-muted">
+          <p className="mt-1 font-mono text-xs tabular-nums text-muted" data-testid="hull-readout">
             Hull {Math.ceil(hud?.hp ?? 0)} · Lv {hud?.level ?? 1} · {hud?.kills ?? 0} down
           </p>
-          {(hud?.combo ?? 0) >= 3 && (
-            <p className="mt-1 font-display text-xs font-semibold uppercase tracking-wider text-accent">
-              {hud?.combo}x combo
-            </p>
-          )}
           {(hud?.overdrive ?? 0) > 0 && (
             <p
               className="mt-1 animate-pulse font-display text-xs font-bold uppercase tracking-[0.2em]"
@@ -439,6 +434,14 @@ function HudOverlay({
           <p className="mt-0.5 text-[11px] uppercase tracking-wider text-subtle">{label}</p>
         </div>
       </div>
+      {(hud?.combo ?? 0) >= 3 && (
+        <p
+          data-testid="combo-popup"
+          className="absolute top-32 left-1/2 z-10 -translate-x-1/2 rounded-full border border-accent/50 bg-[#12141c]/90 px-3 py-1 font-display text-xs font-semibold uppercase tracking-[0.18em] text-accent shadow-[0_8px_24px_rgba(0,0,0,0.45)] landscape:top-[6.75rem] landscape:left-[40%]"
+        >
+          {hud?.combo}× combo
+        </p>
+      )}
       <div className="pointer-events-auto absolute right-3 top-3 flex gap-2 sm:right-4">
         <button
           type="button"

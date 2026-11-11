@@ -20,17 +20,16 @@ draw). Each suit has a different body plan, weapon mount, and palette. Nose is +
 | cross | Solar Cross | Paladin | Cruciform hull, halo, long lance | Field Mend: slow repair below half hull if you have not been hit for 2s | Sanctum: 3.2s ward (−28% damage) and a 12% heal over that time | 14s | Almost no offensive skill |
 | moth | Lantern Moth | Controller | Four separate wing panels, lantern abdomen | Dust Wake: hulls in the wake behind you move slower | Lure Lamp: a local lamp pulls non-bosses, then a small burst | 11s | Bosses ignore the pull |
 | kiln | Kiln Tortoise | Juggernaut | Low dome, four stub legs, grate snout | Thorns: a slice of damage taken splashes nearby | Kiln Seal: 2.1s invulnerable, slowed, close scorch | 13s | You become a slow turret |
-| kite | Tether Kite | Skirmisher | Diamond sail, cross spars, long ribbon | Slipstream: near top speed, fire interval −14% and incoming damage −18%. Hull 122. Dash i-frames 0.22s | Ribbon Line: a short dash that leaves a damaging line | 8s | The damage reduction drops the moment you slow down. The line is still thin |
+| kite | Tether Kite | Skirmisher | Diamond sail, cross spars, long ribbon | Slipstream: while moving (about half speed), fire interval −14% and incoming damage −36%. Hull 136. The first hit in that state is cut by another 12, then the buffer recharges over 3.4s of movement. Dash i-frames 0.36s | Ribbon Line: a short dash that leaves a damaging line and refreshes the buffer | 8s | Stop and both the reduction and the buffer drop. The line is still thin |
 
 VFX stay on the mech or the aim line. Skills do not fill the screen. Enemy plates
 carry a cached light rim so they read on the dark floor tiles. Hulls clipped by
 the view get an edge chevron; walkers and crawlers use a larger mark.
 
 Sector 1 survival: Aether, Storm and Kite stay lighter than Dune Shield (168 hull,
-front-arc delete, halved first hit). Their extra hull and the conditional repair
-or damage reduction are there so a careful pilot can clear the first sector.
-Aether only repairs while untouched, Storm only mitigates inside the net, and
-Kite only mitigates while already fast.
+front-arc delete, halved first hit). Kite's hull is 136 and its reduction only
+exists while it is moving, so a parked kite is still paper. Aether only repairs
+while untouched, and Storm only mitigates inside the net.
 
 Movement, exact aim, dual-thumb sticks, and every game mode stay as they are.
 Saves are unchanged: still `wing-protocol-save-v1`, same mech ids.

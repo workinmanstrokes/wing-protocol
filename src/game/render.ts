@@ -101,6 +101,17 @@ export function cachedSprite(key: string, size: number, draw: (ctx: CanvasRender
   return s;
 }
 
+/** Same pixels as drawSprite, without save/restore. The caller must restore the camera transform itself. */
+export function drawSpriteFast(ctx: CanvasRenderingContext2D, s: Sprite, x: number, y: number, rot = 0, k = 1) {
+  ctx.translate(x, y);
+  if (rot) ctx.rotate(rot);
+  if (k !== 1) ctx.scale(k, k);
+  ctx.drawImage(s.c, -s.half, -s.half, s.half * 2, s.half * 2);
+  if (k !== 1) ctx.scale(1 / k, 1 / k);
+  if (rot) ctx.rotate(-rot);
+  ctx.translate(-x, -y);
+}
+
 export function drawSprite(ctx: CanvasRenderingContext2D, s: Sprite, x: number, y: number, rot = 0, k = 1) {
   if (rot === 0 && k === 1) {
     ctx.drawImage(s.c, x - s.half, y - s.half, s.half * 2, s.half * 2);
