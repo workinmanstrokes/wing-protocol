@@ -31,7 +31,7 @@ test("every suit has a unique skill, passive, and a fair cooldown", () => {
 test("passives apply the documented tradeoffs", () => {
   assert.equal(weaponDamageMul("aether"), ABILITY.aether.weaponMul);
   assert.equal(weaponDamageMul("forge"), 1);
-  assert.ok(incomingDamageMul("aether", { bulwark: false, brace: false, ward: false }) > 1);
+  assert.equal(incomingDamageMul("aether", { bulwark: false, brace: false, ward: false }), 1);
   assert.ok(incomingDamageMul("forge", { bulwark: false, brace: false, ward: false }) < 1);
   const braced = incomingDamageMul("forge", { bulwark: false, brace: true, ward: false });
   assert.ok(braced < ABILITY.forge.takenMul);
@@ -58,6 +58,19 @@ test("aegis catches shots from the front and ignores the rear", () => {
   assert.equal(aegisBlocks(face, -8, 2), true);
   assert.equal(aegisBlocks(face, 10, 0), false);
   assert.equal(aegisBlocks(face, 0, 10), false);
+});
+
+test("fragile suits outlast a careful sector 1 without catching the vanguard", () => {
+  const hp = Object.fromEntries(MECHS.map((m) => [m.id, m.stats.hp]));
+  assert.ok(hp.aether >= 118 && hp.aether < hp.dune);
+  assert.ok(hp.storm >= 120 && hp.storm < hp.dune);
+  assert.ok(hp.kite >= 116 && hp.kite < hp.dune);
+  assert.equal(ABILITY.aether.takenMul, 1);
+  assert.ok(ABILITY.aether.glideFrac >= 0.02);
+  assert.equal(incomingDamageMul("kite", { bulwark: false, brace: false, ward: false }), 1);
+  assert.ok(incomingDamageMul("kite", { bulwark: false, brace: false, ward: false, slip: true }) <= 0.85);
+  assert.equal(incomingDamageMul("storm", { bulwark: false, brace: false, ward: false }), 1);
+  assert.ok(incomingDamageMul("storm", { bulwark: false, brace: false, ward: false, net: true }) <= 0.86);
 });
 
 test("dust wake and ribbon segment math", () => {

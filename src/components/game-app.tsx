@@ -34,7 +34,7 @@ import { MainMenu, type MenuTab } from "@/components/menu/main-menu";
 import { MenuBackground } from "@/components/menu/menu-bg";
 import type { StartSpec } from "@/components/menu/play-tab";
 import { AimAssistToggle, AudioSettings, GraphicsToggle } from "@/components/menu/settings";
-import { Eyebrow, RewardLine, rarityClass, useSave } from "@/components/menu/shared";
+import { Eyebrow, MechPortrait, RewardLine, rarityClass, useSave } from "@/components/menu/shared";
 
 type Screen = "menu" | "combat" | "results" | "tower";
 
@@ -311,6 +311,10 @@ export function GameApp() {
         <Results
           outcome={outcome}
           onMenu={() => setScreen("menu")}
+          onHangar={() => {
+            setTab("hangar");
+            setScreen("menu");
+          }}
           onAgain={async () => {
             // Natural break between runs: a portal may show a commercial break here (never mid-run).
             await portalCommercialBreak();
@@ -600,7 +604,8 @@ function TouchPad({ input, hud, mechId }: { input: GameInput; hud: HudState | nu
         data-testid="skill-btn"
         aria-label={ready ? mech.skill.name : `${mech.skill.name} cooling down`}
         className={cn(
-          "absolute bottom-[calc(46%+0.5rem)] right-5 hidden size-16 landscape:right-32 place-items-center rounded-full border bg-surface/80 font-display text-[10px] font-semibold uppercase leading-tight tracking-wider pointer-coarse:grid",
+          "absolute bottom-[calc(46%+0.75rem)] right-[max(1.25rem,env(safe-area-inset-right))] hidden size-16 place-items-center rounded-full border bg-surface/80 font-display text-[10px] font-semibold uppercase leading-tight tracking-wider pointer-coarse:grid",
+          "landscape:bottom-[max(6.5rem,env(safe-area-inset-bottom))] landscape:right-[max(12rem,calc(env(safe-area-inset-right)+9rem))]",
           ready ? "border-accent text-fg" : "border-border text-muted",
         )}
         onPointerDown={(e) => {
@@ -715,95 +720,132 @@ function PauseMenu({
   );
 }
 
-function Results({ outcome, onMenu, onAgain }: { outcome: Outcome; onMenu: () => void; onAgain: () => void }) {
+function Results({
+  outcome,
+  onMenu,
+  onHangar,
+  onAgain,
+}: {
+  outcome: Outcome;
+  onMenu: () => void;
+  onHangar: () => void;
+  onAgain: () => void;
+}) {
   const { result, payout, tower } = outcome;
+  const save = useSave();
+  const mech = MECH_MAP[save.selected];
   const t = Math.floor(result.time);
   const [ad, setAd] = useState<"idle" | "playing" | "failed">("idle");
   const [bonus, setBonus] = useState<RunPayout | null>(null);
   const adsLeft = extractAdsLeftToday();
   const offer2x = !tower && canDoubleExtract(result) && !bonus;
+  const title = tower
+    ? `${tower.cleared} floor${tower.cleared === 1 ? "" : "s"} cleared${tower.best ? " · new best" : ""}`
+    : result.survived
+      ? "Mission complete"
+      : "Mission failed";
+  const stats: { label: string; value: string }[] = tower
+    ? []
+    : [
+        { label: "Time", value: `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}` },
+        { label: "Kills", value: `${result.kills}` },
+        { label: "Level", value: `${result.level}` },
+        { label: "Bosses", value: `${result.bossKills ?? 0}` },
+        ...(result.mode === "sortie"
+          ? [
+              { label: "Sector", value: `${result.sector ?? 1}/3` },
+              { label: "Uplinks", value: `${result.uplinks ?? 0}/3` },
+            ]
+          : []),
+      ];
   return (
-    <div className="flex h-full flex-col items-center justify-center overflow-y-auto p-5" data-testid="results">
-      <div className="w-full max-w-lg rounded-xl border border-border bg-surface p-6">
-        <p className="font-display text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">{outcome.label}</p>
-        {tower ? (
-          <h2 className="mt-1 font-display text-3xl font-semibold">
-            {tower.cleared} floor{tower.cleared === 1 ? "" : "s"} cleared{tower.best ? " · new best" : ""}
-          </h2>
-        ) : (
-          <h2 className="mt-1 font-display text-3xl font-semibold">{result.survived ? "Mission complete" : "Mission failed"}</h2>
-        )}
-        {!tower && (
-          <dl className="mt-5 grid grid-cols-2 gap-3 text-sm">
-            <Stat label="Time" value={`${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`} />
-            <Stat label="Kills" value={`${result.kills}`} />
-            <Stat label="Level" value={`${result.level}`} />
-            <Stat label="Bosses down" value={`${result.bossKills ?? 0}`} />
-            {result.mode === "sortie" && <Stat label="Sector" value={`${result.sector ?? 1}/3`} />}
-            {result.mode === "sortie" && <Stat label="Uplinks" value={`${result.uplinks ?? 0}/3`} />}
-          </dl>
-        )}
-        <div className="mt-4 rounded-lg border border-border bg-elevated p-3 text-sm" data-testid="payout">
-          <p className="text-[11px] uppercase tracking-wider text-muted">Rewards</p>
-          <p className="mt-1">
-            <RewardLine reward={{ credits: payout.credits, cores: payout.cores, shards: payout.shards, keys: payout.keys }} />
-          </p>
-          {bonus && (
-            <p className="mt-1 text-legend" data-testid="extract-bonus">
-              2× extract bonus: <RewardLine reward={{ credits: bonus.credits, shards: bonus.shards, keys: bonus.keys }} />
+    <div className="flex h-full min-h-0 flex-col bg-bg" data-testid="results">
+      <div className="flex min-h-0 flex-1 flex-col landscape:flex-row">
+        <div className="relative h-[38vh] min-h-48 shrink-0 overflow-hidden border-b border-border bg-surface landscape:h-auto landscape:w-[42%] landscape:border-b-0 landscape:border-r">
+          <MechPortrait id={mech.id} className="h-full w-full" />
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-bg via-bg/80 to-transparent px-5 pb-4 pt-16">
+            <p className="font-display text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">
+              {outcome.label} · {mech.role}
+            </p>
+            <h2 className="font-display text-4xl font-semibold leading-none">{title}</h2>
+            <p className="mt-1 text-sm text-muted">{mech.name}</p>
+          </div>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+          {stats.length > 0 && (
+            <dl className="grid flex-1 grid-cols-2 content-stretch gap-2">
+              {stats.map((s) => (
+                <div key={s.label} className="flex min-h-16 flex-col justify-center rounded-lg border border-border bg-surface px-3 py-2">
+                  <Stat label={s.label} value={s.value} />
+                </div>
+              ))}
+            </dl>
+          )}
+          <div className="mt-3 rounded-lg border border-border bg-elevated p-3 text-sm" data-testid="payout">
+            <p className="text-[11px] uppercase tracking-wider text-muted">Rewards</p>
+            <p className="mt-1">
+              <RewardLine reward={{ credits: payout.credits, cores: payout.cores, shards: payout.shards, keys: payout.keys }} />
+            </p>
+            {bonus && (
+              <p className="mt-1 text-legend" data-testid="extract-bonus">
+                2× extract bonus: <RewardLine reward={{ credits: bonus.credits, shards: bonus.shards, keys: bonus.keys }} />
+              </p>
+            )}
+          </div>
+          {offer2x && rewardedAdAvailable() && (
+            <div className="mt-3 rounded-lg border border-legend/50 bg-elevated p-3">
+              <button
+                type="button"
+                data-testid="extract-2x"
+                disabled={adsLeft <= 0 || ad === "playing"}
+                onClick={async () => {
+                  setAd("playing");
+                  const ok = await showRewardedAd();
+                  const extra = ok ? doubleExtractLoot(result) : null;
+                  setBonus(extra);
+                  setAd(extra ? "idle" : "failed");
+                }}
+                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-legend/90 px-3 text-sm font-semibold text-bg disabled:opacity-40"
+              >
+                <PlayCircle className="size-4" />
+                {ad === "playing" ? "Ad playing…" : adsLeft > 0 ? "Watch ad: extract with 2× loot" : "2× extract back tomorrow"}
+              </button>
+              <p className="mt-1 text-center text-[11px] text-muted">
+                Optional. Doubles credits, keys and salvage (not cores). {adsLeft}/3 left today.
+                {ad === "failed" ? " No reward this time." : ""}
+              </p>
+            </div>
+          )}
+          {result.evolutions && result.evolutions.length > 0 && (
+            <p className="mt-3 text-sm text-muted">
+              Evolved: <span className="text-fg">{result.evolutions.join(", ")}</span>
             </p>
           )}
+          {result.loot.length > 0 && (
+            <div className="mt-4">
+              <p className="text-[11px] uppercase tracking-wider text-muted">Salvage (duplicates became shards)</p>
+              <ul className="mt-1 space-y-1 text-sm">
+                {result.loot.map((g) => (
+                  <li key={g.id}>
+                    <span className={rarityClass(g.rarity)}>{g.name}</span>
+                    <span className="text-muted"> · {g.slot}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
-        {offer2x && rewardedAdAvailable() && (
-          <div className="mt-3 rounded-lg border border-legend/50 bg-elevated p-3">
-            <button
-              type="button"
-              data-testid="extract-2x"
-              disabled={adsLeft <= 0 || ad === "playing"}
-              onClick={async () => {
-                setAd("playing");
-                const ok = await showRewardedAd();
-                const extra = ok ? doubleExtractLoot(result) : null;
-                setBonus(extra);
-                setAd(extra ? "idle" : "failed");
-              }}
-              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-legend/90 px-3 text-sm font-semibold text-bg disabled:opacity-40"
-            >
-              <PlayCircle className="size-4" />
-              {ad === "playing" ? "Ad playing…" : adsLeft > 0 ? "Watch ad: extract with 2× loot" : "2× extract back tomorrow"}
-            </button>
-            <p className="mt-1 text-center text-[11px] text-muted">
-              Optional. Doubles credits, keys and salvage (not cores). {adsLeft}/3 left today.
-              {ad === "failed" ? " No reward this time." : ""}
-            </p>
-          </div>
-        )}
-        {result.evolutions && result.evolutions.length > 0 && (
-          <p className="mt-3 text-sm text-muted">
-            Evolved: <span className="text-fg">{result.evolutions.join(", ")}</span>
-          </p>
-        )}
-        {result.loot.length > 0 && (
-          <div className="mt-4">
-            <p className="text-[11px] uppercase tracking-wider text-muted">Salvage (duplicates became shards)</p>
-            <ul className="mt-1 space-y-1 text-sm">
-              {result.loot.map((g) => (
-                <li key={g.id}>
-                  <span className={rarityClass(g.rarity)}>{g.name}</span>
-                  <span className="text-muted"> · {g.slot}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-          <Button className="flex-1" onClick={onAgain} data-testid="again">
-            Play again
-          </Button>
-          <Button className="flex-1" variant="secondary" onClick={onMenu} data-testid="to-menu">
-            Main menu
-          </Button>
-        </div>
+      </div>
+      <div className="grid shrink-0 grid-cols-1 gap-2 border-t border-border bg-surface px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] landscape:grid-cols-3">
+        <Button className="min-h-12" onClick={onAgain} data-testid="again">
+          Retry
+        </Button>
+        <Button className="min-h-12" variant="secondary" onClick={onHangar} data-testid="to-hangar">
+          Hangar
+        </Button>
+        <Button className="min-h-12" variant="secondary" onClick={onMenu} data-testid="to-menu">
+          Main menu
+        </Button>
       </div>
     </div>
   );
