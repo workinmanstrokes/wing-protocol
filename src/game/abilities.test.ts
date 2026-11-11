@@ -73,7 +73,9 @@ test("fragile suits outlast a careful sector 1 without catching the vanguard", (
   assert.ok(ABILITY.kite.buffer >= 10);
   assert.ok(ABILITY.kite.iFrame >= 0.3);
   assert.equal(incomingDamageMul("storm", { bulwark: false, brace: false, ward: false }), 1);
-  assert.ok(incomingDamageMul("storm", { bulwark: false, brace: false, ward: false, net: true }) <= 0.86);
+  assert.ok(incomingDamageMul("storm", { bulwark: false, brace: false, ward: false, net: true }) <= 0.7);
+  assert.ok(hp.storm <= 136 && hp.storm + ABILITY.storm.coil < hp.dune, "storm stays lighter than the vanguard");
+  assert.ok(ABILITY.storm.coil >= 16 && ABILITY.storm.net >= 4 && ABILITY.storm.netR >= 130);
 });
 
 test("dust wake and ribbon segment math", () => {

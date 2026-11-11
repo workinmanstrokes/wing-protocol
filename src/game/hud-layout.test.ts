@@ -17,6 +17,14 @@ const VIEWS = [
   { name: "landscape", w: 915, h: 412 },
 ];
 
+test("combo popup sits below the readout band", () => {
+  const portrait = comboPopupRect(412, 915);
+  const safe = threatSafeRect(412, 915);
+  assert.ok(portrait.y >= safe.y + 36, `portrait combo ${portrait.y} vs safe ${safe.y}`);
+  const land = comboPopupRect(915, 412);
+  assert.ok(land.y >= 120);
+});
+
 test("combo popup stays clear of the hull readout and the timer", () => {
   for (const v of VIEWS) {
     const combo = comboPopupRect(v.w, v.h);

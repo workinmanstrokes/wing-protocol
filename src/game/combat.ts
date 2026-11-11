@@ -16,7 +16,7 @@ import {
 } from "./abilities";
 import { mechArtVersion } from "./mech-art";
 import { PACE_EVENTS, paceMultiplier, sectorLayout, type ObstacleKind } from "./levels";
-import { clampThreatMark, minimapCenter } from "./hud-layout";
+import { clampThreatMark, minimapCenter, readoutBand } from "./hud-layout";
 import {
   aliveCap,
   baseSpawnInterval,
@@ -377,6 +377,8 @@ export class Combat {
   private kiteBufferReady = true;
   private kiteBufferT = 0;
   private kiteFast = false;
+  private stormCoil = 0;
+  private stormCoilMax = 0;
   private hitSfxT = 0;
   private buckets = new Map<number, Mob[]>();
   private bucketKeys: number[] = [];
@@ -513,6 +515,8 @@ export class Combat {
     this.base = this.computeBase();
     this.maxHp = this.base.hp;
     this.hp = Math.max(1, this.maxHp * Math.min(1, cfg.startHpFrac));
+    this.stormCoilMax = this.mechId === "storm" ? ABILITY.storm.coil : 0;
+    this.stormCoil = this.stormCoilMax;
     this.skillMax = MECH_MAP[this.mechId].skill.cooldown / this.base.skillHaste;
     this.skillCd = 0;
     this.seedWrecks();
@@ -562,13 +566,12 @@ export class Combat {
       if (this.time - e.t > 3) continue; // skipped over (debug skipTo): don't burst-spawn
       if (e.kind === "elite") {
         const kind = this.sector === 0 ? "walker" : this.sector === 1 ? "sniper" : "crawler";
-        const m = this.spawnMob(false, kind, undefined, true);
-        if (m) {
-          // Sector 1 keeps a single elite on the field so two beats cannot stack.
-          if (this.sector > 0 || this.aliveElites < 1) {
-            this.makeElite(m, ELITE_MODS[this.paceIdx % ELITE_MODS.length]!);
-            this.announce("ELITE SIGNAL", 1.6);
-          }
+        // Never add a body past the cap. A full sector 1 field promotes a hull instead.
+        let m = this.spawnMob(false, kind);
+        if (!m) m = this.mobs.find((x) => x.alive && !x.boss && !x.elite && x.kind !== "swarm");
+        if (m && (this.sector > 0 || this.aliveElites < 1)) {
+          this.makeElite(m, ELITE_MODS[this.paceIdx % ELITE_MODS.length]!);
+          this.announce("ELITE SIGNAL", 1.6);
         }
       } else {
         this.surgeT = e.dur ?? 8;
@@ -641,6 +644,16 @@ export class Combat {
       b.r = 4; b.dmg = stats.dmg * 0.5; b.life = 0.6; b.pierce = 0; b.friendly = true; b.homing = 0;
       b.explode = 0; b.color = "#ff8ab0"; b.crit = false; b.chain = 0; b.ret = 0;
     }
+  }
+
+  /** Hold enemy centers below the nameplate so they are not drawn through the readout. */
+  private keepBelowReadout(m: Mob) {
+    const h = this.canvas.clientHeight;
+    const w = this.canvas.clientWidth;
+    if (h < 48) return;
+    const band = readoutBand(w, h);
+    const minY = this.camY + (band - h / 2);
+    if (m.y < minY) m.y = minY;
   }
 
   private makeElite(m: Mob, mod: string) {
@@ -979,6 +992,9 @@ export class Combat {
         this.kiteBufferT -= dt;
         if (this.kiteBufferT <= 0) this.kiteBufferReady = true;
       }
+    }
+    if (this.mechId === "storm" && this.stormCoil < this.stormCoilMax && this.sinceHit > ABILITY.storm.coilDelay) {
+      this.stormCoil = Math.min(this.stormCoilMax, this.stormCoil + ABILITY.storm.coilRegen * dt);
     }
     if (this.hitSfxT > 0) this.hitSfxT -= dt;
 
@@ -1514,6 +1530,7 @@ export class Combat {
     m.dashT = 0;
     if (!boss && m.kind !== "charger") m.special = 0;
     if (m.elite) this.aliveElites += 1;
+    if (!boss) this.keepBelowReadout(m);
     return m;
   }
 
@@ -1761,6 +1778,7 @@ export class Combat {
       }
       m.x += m.vx * dt;
       m.y += m.vy * dt;
+      this.keepBelowReadout(m);
       for (const w of this.wrecks) {
         const wx = m.x - w.x;
         const wy = m.y - w.y;
@@ -2129,6 +2147,11 @@ export class Combat {
       dmg = Math.max(0, dmg - ABILITY.kite.buffer);
       this.kiteBufferReady = false;
       this.kiteBufferT = ABILITY.kite.bufferCd;
+    }
+    if (this.mechId === "storm" && this.stormCoil > 0 && dmg > 0) {
+      const absorbed = Math.min(this.stormCoil, dmg);
+      this.stormCoil -= absorbed;
+      dmg -= absorbed;
     }
     if (bulwark) {
       this.bulwarkReady = false;
@@ -2657,6 +2680,13 @@ export class Combat {
     ctx.save();
     ctx.translate(this.px, this.py);
     ctx.rotate(this.aim);
+    if (this.mechId === "storm" && this.stormCoil > 0) {
+      ctx.strokeStyle = `rgba(143,208,255,${0.35 + 0.4 * (this.stormCoil / this.stormCoilMax)})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 22, 0, Math.PI * 2 * (this.stormCoil / this.stormCoilMax));
+      ctx.stroke();
+    }
     if (this.mechId === "kite" && this.kiteBufferReady) {
       ctx.strokeStyle = this.kiteFast ? "rgba(255,90,138,0.85)" : "rgba(255,90,138,0.35)";
       ctx.lineWidth = 1.5;

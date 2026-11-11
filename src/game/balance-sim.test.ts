@@ -30,6 +30,25 @@ test("a careful pilot clears sector 1 with every suit", () => {
   assert.equal(MECHS.length, report.length);
 });
 
+test("a two-thumb storm pilot needs the coil and the cast ward", () => {
+  const previous = [];
+  const tuned = [];
+  for (let s = 1; s <= 12; s++) {
+    previous.push(simulateCarefulRun("storm", s * 997, "current", "previous"));
+    tuned.push(simulateCarefulRun("storm", s * 997, "current", "current"));
+  }
+  const rate = (rows: { cleared: boolean; deathTime: number | null; endHp: number }[]) =>
+    rows.filter((r) => r.cleared).length / rows.length;
+  const meanDeath = (rows: { cleared: boolean; deathTime: number | null }[]) => {
+    const deaths = rows.filter((r) => r.deathTime !== null);
+    return deaths.length ? deaths.reduce((s, r) => s + (r.deathTime ?? 0), 0) / deaths.length : null;
+  };
+  const dune = reportRoster("current", 12).find((r) => r.id === "dune")!;
+  assert.ok(rate(previous) <= 0.45, `old storm kit clear ${rate(previous)} death ${meanDeath(previous)}`);
+  assert.ok(rate(tuned) >= 0.75, `tuned storm clear ${rate(tuned)} death ${meanDeath(tuned)}`);
+  assert.ok(rate(tuned) + 0.01 >= dune.clearRate - 0.2, `storm ${rate(tuned)} dune ${dune.clearRate}`);
+});
+
 test("tether kite's slipstream is what keeps it alive", () => {
   const moving = simulateCarefulRun("kite", 997, "current");
   assert.equal(moving.cleared, true);

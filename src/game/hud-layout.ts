@@ -17,6 +17,14 @@ export function isLandscape(w: number, h: number): boolean {
   return w > h;
 }
 
+/**
+ * Screen-space band reserved for the nameplate and the timer. Enemy centers
+ * are held at or below this line so they are not drawn through the readout.
+ */
+export function readoutBand(w: number, h: number): number {
+  return isLandscape(w, h) ? 96 : 120;
+}
+
 /** Hull name, bars, and the "Hull N · Lv · kills" line. */
 export function hullReadoutRect(w: number, h: number): Rect {
   const landscape = isLandscape(w, h);
@@ -38,7 +46,7 @@ export function comboPopupRect(w: number, h: number): Rect {
   const landscape = isLandscape(w, h);
   const width = 124;
   const height = 30;
-  const top = landscape ? 108 : 128;
+  const top = landscape ? 132 : 164;
   const cx = landscape ? w * 0.4 : w * 0.5;
   return { x: cx - width / 2, y: top, w: width, h: height };
 }

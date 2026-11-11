@@ -44,6 +44,7 @@ type Body = {
   elite: boolean;
   shooter: boolean;
   boss: boolean;
+  slot: number;
 };
 
 const SHOOTERS = new Set(["walker", "crawler", "titan", "ace"]);
@@ -68,6 +69,7 @@ function makeTrash(kind: TrashKind, time: number, elite: boolean, rng: Rng, dist
     elite: false,
     shooter: SHOOTERS.has(kind),
     boss: false,
+    slot: 0,
   };
   if (elite) {
     body.elite = true;
@@ -123,7 +125,16 @@ export function sampleSpawnPressure(profile: BudgetProfile, seed: number, killRa
       if (e.kind === "elite" && e.t >= 40 && !(profile === "legacy" && e.t < 70)) {
         const elites = bodies.filter((b) => b.elite).length;
         const promote = profile === "legacy" || elites < 1;
-        push(makeTrash("walker", time, promote, rng, 480 + rng() * 80));
+        if (profile === "current" && count() >= cap) {
+          const host = bodies.find((b) => !b.boss && !b.elite);
+          if (host && promote) {
+            host.elite = true;
+            host.hp *= 3.2;
+            host.dmg *= 1.25;
+          }
+        } else {
+          push(makeTrash("walker", time, promote, rng, 480 + rng() * 80));
+        }
       }
     }
     if (profile === "legacy" && time >= 22 && time < 22 + dt) {
@@ -163,6 +174,7 @@ export function sampleSpawnPressure(profile: BudgetProfile, seed: number, killRa
         elite: false,
         shooter: true,
         boss: true,
+        slot: bodies.length,
       });
     }
 
@@ -251,9 +263,35 @@ function skillCooldown(id: MechId): number {
  * the nearest hull, dodges telegraphed slams unless surrounded, and uses the
  * defensive skill on cooldown.
  */
-export function simulateCarefulRun(id: MechId, seed: number, profile: BudgetProfile): SuitRun {
+export type StormKit = "current" | "previous";
+
+/**
+ * Storm is simulated as a two-thumb pilot: thumb aim misses, the net cast is
+ * late, and the field is often placed ahead of the pack so only some hulls
+ * are slowed. `previous` is the pre-buff kit (hull 128, 16% reduction, no coil).
+ */
+export function simulateCarefulRun(id: MechId, seed: number, profile: BudgetProfile, stormKit: StormKit = "current"): SuitRun {
   const rng = mulberry32(seed ^ 0x9e3779b9);
   const p = pilotFor(id);
+  const humanStorm = id === "storm";
+  const stormPrev = humanStorm && stormKit === "previous";
+  if (stormPrev) {
+    p.hp = 128;
+    p.maxHp = 128;
+    p.dps = 11 * 3.8;
+  }
+  const stormAim = humanStorm ? 0.58 : 1;
+  const stormNetDr = stormPrev ? 0.84 : ABILITY.storm.netDr;
+  const stormNetSlow = stormPrev ? 0.62 : ABILITY.storm.netSlow;
+  const stormNetDur = stormPrev ? 3.2 : ABILITY.storm.net;
+  const stormNetCd = stormPrev ? 11 : MECH_MAP.storm.skill.cooldown;
+  const stormHeal = stormPrev ? 3 : ABILITY.storm.chainHeal;
+  let stormCoil = stormPrev ? 0 : ABILITY.storm.coil;
+  const stormCoilMax = stormCoil;
+  let stormReact = 0;
+  let stormArming = false;
+  let stormNetMiss = false;
+  let stormChip = 2.2;
   const bodies: Body[] = [];
   let time = 0;
   let spawnAcc = 0;
@@ -269,6 +307,7 @@ export function simulateCarefulRun(id: MechId, seed: number, profile: BudgetProf
   const nonBoss = () => bodies.reduce((n, b) => n + (b.boss ? 0 : 1), 0);
 
   const spawnBody = (b: Body) => {
+    b.slot = bodies.length + seed;
     bodies.push(b);
   };
 
@@ -307,6 +346,7 @@ export function simulateCarefulRun(id: MechId, seed: number, profile: BudgetProf
         elite: false,
         shooter: true,
         boss: true,
+        slot: bodies.length,
       });
     }
 
@@ -348,7 +388,20 @@ export function simulateCarefulRun(id: MechId, seed: number, profile: BudgetProf
     p.iframe = Math.max(0, p.iframe - dt);
     p.sinceHit += dt;
 
-    if (p.skillCd <= 0) {
+    const stormReady = id === "storm" && p.skillCd <= 0;
+    if (stormReady) {
+      if (!stormArming) {
+        stormArming = true;
+        stormReact = 0.7 + rng() * 0.7;
+      }
+      stormReact -= dt;
+      if (stormReact <= 0) {
+        stormArming = false;
+        p.skillCd = stormNetCd;
+        p.skillT = stormNetDur;
+        stormNetMiss = rng() < 0.42;
+      }
+    } else if (p.skillCd <= 0) {
       p.skillCd = skillCooldown(id);
       if (id === "scythe") p.iframe = Math.max(p.iframe, ABILITY.scythe.iFrame);
       if (id === "kite") {
@@ -361,7 +414,6 @@ export function simulateCarefulRun(id: MechId, seed: number, profile: BudgetProf
         p.skillT = ABILITY.kiln.seal;
       }
       if (id === "dune") p.skillT = ABILITY.dune.aegis;
-      if (id === "storm") p.skillT = ABILITY.storm.net;
       if (id === "cross") p.skillT = ABILITY.cross.ward;
       if (id === "moth") {
         p.skillT = ABILITY.moth.lure;
@@ -374,7 +426,9 @@ export function simulateCarefulRun(id: MechId, seed: number, profile: BudgetProf
     if (id === "kiln" && p.skillT > 0) speed *= ABILITY.kiln.sealMul;
     for (const b of bodies) {
       let chase = b.speed;
-      if (id === "storm" && p.skillT > 0 && b.dist < ABILITY.storm.netR + 40) chase *= ABILITY.storm.netSlow;
+      if (id === "storm" && p.skillT > 0 && !stormNetMiss && b.slot % 2 === 0 && b.dist < ABILITY.storm.netR + 40) {
+        chase *= stormNetSlow;
+      }
       if (b.kind === "charger") {
         b.fireCd -= dt;
         if (b.fireCd <= 0) {
@@ -399,17 +453,20 @@ export function simulateCarefulRun(id: MechId, seed: number, profile: BudgetProf
       }
     }
     if (target >= 0) {
-      const dealt = p.dps * dt;
+      const dealt = p.dps * dt * stormAim;
       bodies[target]!.hp -= dealt;
       dealtAcc += dealt;
       if (id === "serpent") bodies[target]!.hp -= dealt * ABILITY.serpent.venomFrac * 0.35;
       if (id === "storm" && dealtAcc >= (p.dps / Math.max(0.2, MECH_MAP[id].stats.fireRate)) * ABILITY.storm.every) {
         dealtAcc = 0;
-        p.hp = Math.min(p.maxHp, p.hp + ABILITY.storm.chainHeal);
+        p.hp = Math.min(p.maxHp, p.hp + stormHeal);
       }
     }
     for (let i = bodies.length - 1; i >= 0; i--) if (bodies[i]!.hp <= 0) bodies.splice(i, 1);
 
+    if (id === "storm" && stormCoil < stormCoilMax && p.sinceHit > ABILITY.storm.coilDelay) {
+      stormCoil = Math.min(stormCoilMax, stormCoil + ABILITY.storm.coilRegen * dt);
+    }
     if (id === "aether" && p.sinceHit > ABILITY.aether.glideDelay) {
       p.hp = Math.min(p.maxHp, p.hp + dt * p.maxHp * ABILITY.aether.glideFrac);
     }
@@ -419,7 +476,15 @@ export function simulateCarefulRun(id: MechId, seed: number, profile: BudgetProf
     }
 
     let hit: number | null = null;
-    const shotMul = crowded ? 0.34 : 0.05;
+    const shotMul = (crowded ? 0.34 : 0.05) * (humanStorm ? 1.35 : 1);
+    if (humanStorm) {
+      stormChip -= dt;
+      const threat = bodies.find((b) => b.dist < 340);
+      if (threat && stormChip <= 0) {
+        stormChip = 2.15 + rng() * 0.7;
+        hit = Math.max(hit ?? 0, threat.dmg * (threat.boss ? 0.7 : 1));
+      }
+    }
     for (const b of bodies) {
       if (b.kind !== "charger") b.fireCd -= dt;
       if (b.dist < b.r + 16) hit = Math.max(hit ?? 0, b.dmg * (b.boss && b.dist < 200 ? 1.15 : 1));
@@ -433,9 +498,14 @@ export function simulateCarefulRun(id: MechId, seed: number, profile: BudgetProf
     if (hit !== null && p.iframe <= 0 && !lureSafe) {
       let dmg = hit * (profile === "current" ? sectorIncomingMul(0, time) : 1);
       const slip = id === "kite" && p.slip;
-      const net = id === "storm" && p.skillT > 0;
       const ward = id === "cross" && p.skillT > 0;
-      dmg *= incomingDamageMul(id, { bulwark: id === "dune" && p.bulwark, brace: false, ward, slip, net });
+      dmg *= incomingDamageMul(id, { bulwark: id === "dune" && p.bulwark, brace: false, ward, slip, net: false });
+      if (id === "storm" && p.skillT > 0) dmg *= stormNetDr;
+      if (id === "storm" && stormCoil > 0) {
+        const absorbed = Math.min(stormCoil, dmg);
+        stormCoil -= absorbed;
+        dmg -= absorbed;
+      }
       if (id === "dune" && p.bulwark) {
         p.bulwark = false;
         p.bulwarkT = ABILITY.dune.bulwarkCd;

@@ -11,7 +11,7 @@ export const ABILITY = {
   scythe: { tempo: 0.55, tempoMul: 1.28, dash: 168, iFrame: 0.22, trailR: 26, trailDmg: 3.1 },
   dune: { bulwarkMul: 0.5, bulwarkCd: 7, aegis: 3, aegisHalf: 0.95, shove: 48, shoveR: 120, shoveDmg: 1.1 },
   serpent: { orbit: 4.2, venom: 2, venomFrac: 0.22 },
-  storm: { every: 5, chainFrac: 0.4, chainR: 96, chainHeal: 3, net: 3.2, netR: 108, netReach: 150, netTick: 0.45, netDmg: 0.35, netSlow: 0.62, netDr: 0.84 },
+  storm: { every: 5, chainFrac: 0.4, chainR: 96, chainHeal: 4, net: 4.4, netR: 138, netReach: 150, netTick: 0.45, netDmg: 0.35, netSlow: 0.5, netDr: 0.68, coil: 22, coilDelay: 1.6, coilRegen: 20 },
   vulture: { mines: 3, mineGap: 70, mineArm: 0.55, mineLife: 4.2, mineR: 36, mineDmg: 2.5, crater: 1.15, craterR: 34, craterTick: 0.35, craterDmg: 0.22, craterMin: 18 },
   cross: { ward: 3.2, wardMul: 0.72, healFrac: 0.12, mendDelay: 2, mendFrac: 0.016, mendBelow: 0.5 },
   moth: { lure: 2.6, lureReach: 150, lureR: 168, lureBurst: 86, lureDmg: 3.2, wakeR: 78, wakeSlow: 0.78 },

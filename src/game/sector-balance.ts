@@ -17,16 +17,20 @@ export const TRASH_STATS: Record<TrashKind, [number, number, number, number, num
   shielder: [18, 46, 64, 14, 7, 99],
 };
 
+/** Sector 1 never has more than this many non-boss hulls, surge included. */
+export const SECTOR1_CAP = 12;
+
 /**
  * How many non-boss hulls may be alive at once.
- * Sector 1 ramps smoothly from a handful to a dozen. Later sectors stay high
- * enough that the cap does not change their fights.
+ * Sector 1 ramps from 5 to a hard 12. The surge flag does not raise it, and
+ * scripted elites must promote a hull already on the field once it is full.
+ * Later sectors stay high enough that the cap does not change their fights.
  */
-export function aliveCap(sector: number, time: number, surging: boolean): number {
+export function aliveCap(sector: number, time: number, _surging = false): number {
   if (sector > 0) return 96;
   const u = Math.min(1, Math.max(0, time / 100));
   const s = u * u * (3 - 2 * u);
-  return Math.round(5 + s * 7 + (surging ? 2 : 0));
+  return Math.min(SECTOR1_CAP, Math.round(5 + s * 7));
 }
 
 /** Seconds between trash spawns, before the pace multiplier. */

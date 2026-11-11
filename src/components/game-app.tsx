@@ -403,7 +403,11 @@ function HudOverlay({
   const skillReady = (hud?.skillCd ?? 0) <= 0;
   return (
     <div className="pointer-events-none absolute inset-0 p-3 sm:p-4">
-      <div className="flex items-start justify-between gap-3 pr-28">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[7.5rem] bg-[linear-gradient(to_bottom,#0c0e14_0%,#0c0e14_70%,transparent_100%)] landscape:h-24"
+      />
+      <div className="relative z-10 flex items-start justify-between gap-3 pr-28">
         <div className="min-w-0 max-w-sm flex-1">
           <p className="font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">
             {mech.name}
@@ -437,7 +441,7 @@ function HudOverlay({
       {(hud?.combo ?? 0) >= 3 && (
         <p
           data-testid="combo-popup"
-          className="absolute top-32 left-1/2 z-10 -translate-x-1/2 rounded-full border border-accent/50 bg-[#12141c]/90 px-3 py-1 font-display text-xs font-semibold uppercase tracking-[0.18em] text-accent shadow-[0_8px_24px_rgba(0,0,0,0.45)] landscape:top-[6.75rem] landscape:left-[40%]"
+          className="absolute top-[10.25rem] left-1/2 z-10 -translate-x-1/2 rounded-full border border-accent/50 bg-[#12141c]/90 px-3 py-1 font-display text-xs font-semibold uppercase tracking-[0.18em] text-accent shadow-[0_8px_24px_rgba(0,0,0,0.45)] landscape:top-[8.25rem] landscape:left-[40%]"
         >
           {hud?.combo}× combo
         </p>
