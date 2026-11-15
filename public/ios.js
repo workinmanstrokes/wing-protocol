@@ -23,50 +23,52 @@
     } catch (e) {}
     return 'sw.js';
   })();
-  // 'New version available' prompt: shown when a fresh worker installs while an old
-  // one still controls the page. Without it, a home-screen install keeps the old build
-  // until the app is deleted and re-added. Reloading swaps in the new build.
+  // 'New version available' prompt: when a new worker is waiting, offer one tap to
+  // reload into it instead of leaving the home-screen install on the old build
+  // (no delete-and-re-add). The worker's SKIP_WAITING handler (sw.js) takes over;
+  // controllerchange reloads once.
   var bannerShown = false;
-  function showUpdateBanner() {
+  function promptUpdate(worker) {
     if (bannerShown || !d.body) return;
     bannerShown = true;
     var bar = d.createElement('div');
     bar.setAttribute('data-testid', 'sw-update-banner');
     bar.setAttribute('role', 'status');
     bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom, 0px));z-index:9999;display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:12px;background:#18181b;color:#fafafa;border:1px solid #3f3f46;font:600 14px/1.3 system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.45)';
-    var msg = d.createElement('span');
-    msg.textContent = 'New version available \u2014 reload to play it.';
-    var reload = d.createElement('button');
-    reload.setAttribute('data-testid', 'sw-update-reload');
-    reload.type = 'button';
-    reload.textContent = 'Reload';
-    reload.style.cssText = 'flex:none;min-height:36px;padding:0 14px;border:0;border-radius:8px;background:#7fd1ff;color:#09090b;font:700 14px system-ui,sans-serif';
-    reload.addEventListener('click', function () { w.location.reload(); });
+    bar.textContent = 'A new Wing Protocol build is ready.';
+    var btn = d.createElement('button');
+    btn.setAttribute('data-testid', 'sw-update-reload');
+    btn.type = 'button';
+    btn.textContent = 'Reload to update';
+    btn.style.cssText = 'flex:none;padding:10px 14px;border:0;border-radius:8px;background:#e8c84a;color:#18181b;font:700 14px system-ui,sans-serif';
+    btn.onclick = function () { worker.postMessage({ type: 'SKIP_WAITING' }); };
     var later = d.createElement('button');
     later.setAttribute('data-testid', 'sw-update-dismiss');
     later.type = 'button';
     later.textContent = 'Later';
     later.style.cssText = 'flex:none;min-height:36px;padding:0 10px;border:0;background:transparent;color:#a1a1aa;font:600 14px system-ui,sans-serif';
     later.addEventListener('click', function () { bar.remove(); });
-    bar.appendChild(msg); bar.appendChild(reload); bar.appendChild(later);
+    bar.appendChild(btn);
+    bar.appendChild(later);
     d.body.appendChild(bar);
-  }
-  function watchForUpdate(reg) {
-    if (!reg || !reg.addEventListener) return;
-    reg.addEventListener('updatefound', function () {
-      var nw = reg.installing;
-      if (!nw) return;
-      nw.addEventListener('statechange', function () {
-        // A new worker is ready while an old one still controls this page.
-        if (nw.state === 'installed' && navigator.serviceWorker.controller) showUpdateBanner();
-      });
-    });
   }
   if (!native && !capHost && topLevel && 'serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     w.addEventListener('load', function () {
       navigator.serviceWorker.register(swUrl).then(function (reg) {
         reg.update && reg.update();
-        watchForUpdate(reg);
+        if (reg.waiting) promptUpdate(reg.waiting);
+        reg.addEventListener('updatefound', function () {
+          var nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', function () {
+            // A new worker is ready while an old one still controls this page.
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) promptUpdate(nw);
+          });
+        });
+        var reloaded = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          if (!reloaded) { reloaded = true; w.location.reload(); }
+        });
         // An old home-screen install only discovers the new build when the worker is
         // re-checked: poll while the page is open, and on every foregrounding.
         var check = function () { try { reg.update && reg.update(); } catch (e) {} };

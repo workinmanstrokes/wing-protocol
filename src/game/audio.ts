@@ -245,17 +245,51 @@ export class GameAudio {
     return `${this.base}audio/${path}.${this.ext}`;
   }
 
+  /**
+   * Candidate URLs for one audio file, best first. The first is the Vite
+   * base (right in dev, Capacitor and normal deploys). The second resolves
+   * against the page that actually served the app: the live test site serves
+   * the build under a snapshot sub-path, where an absolute "/audio/..." 
+   * misses the snapshot route and 404s while the page-relative "audio/..." 
+   * loads. `load()` tries each in turn; the first that answers wins.
+   */
+  private urls(path: string): string[] {
+    const primary = this.url(path);
+    if (typeof document === "undefined") return [primary];
+    try {
+      const rel = `audio/${path}.${this.ext}`;
+      const doc = new URL(rel, document.baseURI).href;
+      return doc === primary ? [primary] : [primary, doc];
+    } catch {
+      return [primary];
+    }
+  }
+
   private load(path: string): Promise<AudioBuffer | null> {
     const hit = this.loading.get(path);
     if (hit) return hit;
     const p = (async () => {
       if (!this.ctx) return null;
       try {
-        const res = await fetch(this.url(path));
-        if (!res.ok) {
-          // Record the failure (surfaced in Settings) and drop the cached promise so a
-          // later retry can succeed instead of replaying this same failure forever.
-          this.failed.set(path, `HTTP ${res.status}`);
+        // Try each candidate URL in turn; the first that answers wins. A failure on
+        // every candidate is recorded (surfaced in Settings) and the cached promise
+        // is dropped so a later retry can succeed instead of replaying it forever.
+        let res: Response | null = null;
+        let lastStatus = 0;
+        for (const u of this.urls(path)) {
+          try {
+            const r = await fetch(u);
+            if (r.ok) {
+              res = r;
+              break;
+            }
+            lastStatus = r.status;
+          } catch {
+            // try the next candidate URL
+          }
+        }
+        if (!res) {
+          this.failed.set(path, lastStatus ? `HTTP ${lastStatus}` : "all audio URLs failed");
           this.loading.delete(path);
           return null;
         }

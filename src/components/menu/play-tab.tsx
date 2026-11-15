@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Crown, Flame, Layers, Swords, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MECH_MAP } from "@/game/data";
+import { CORE_LOOP, CORE_LOOP_NAME } from "@/game/core-loop";
 import { claimMissionReward } from "@/game/save";
 import { ELITE_BOSSES, ELITE_MODIFIERS, ELITE_FIRST_CLEAR_CORES, RUSH_FIRST_CLEAR_CORES, type BossKind } from "@/game/meta/modes";
 import { isComplete } from "@/game/meta/missions";
@@ -9,6 +10,7 @@ import type { Mission } from "@/game/types";
 import { Eyebrow, RewardLine, useSave } from "./shared";
 
 export type StartSpec =
+  | { kind: "first" }
   | { kind: "sortie" }
   | { kind: "tower" }
   | { kind: "elite"; boss: BossKind; mods: string[] }
@@ -17,6 +19,7 @@ export type StartSpec =
 type ModeKey = StartSpec["kind"];
 
 const MODES: { id: ModeKey; name: string; tag: string; icon: typeof Swords }[] = [
+  { id: "first", name: "First Sortie", tag: "60-second run · survive to extract", icon: Target },
   { id: "sortie", name: "Sortie", tag: "5-min run · 3 sectors", icon: Swords },
   { id: "tower", name: "Tower", tag: "Roguelike climb", icon: Layers },
   { id: "elite", name: "Elite Boss", tag: "Duel + modifiers", icon: Crown },
@@ -25,7 +28,7 @@ const MODES: { id: ModeKey; name: string; tag: string; icon: typeof Swords }[] =
 
 export function PlayTab({ onStart }: { onStart: (s: StartSpec) => void }) {
   const save = useSave();
-  const [mode, setMode] = useState<ModeKey>("sortie");
+  const [mode, setMode] = useState<ModeKey>("first");
   const [boss, setBoss] = useState<BossKind>("titan");
   const [mods, setMods] = useState<string[]>([]);
   const mech = MECH_MAP[save.selected];
@@ -42,15 +45,6 @@ export function PlayTab({ onStart }: { onStart: (s: StartSpec) => void }) {
         {/* spacer lets the live hangar backdrop show the mech */}
         <div className="h-[25vh] min-h-24" aria-hidden />
         <div className="mx-auto max-w-xl space-y-4">
-          <section aria-label="Core loop" data-testid="core-loop" className="rounded-xl border border-border bg-surface/90 p-3">
-            <Eyebrow>The 60-second loop</Eyebrow>
-            <p className="mt-1 text-sm leading-relaxed text-muted">
-              Survive the horde, kill machines, grab their XP, level up and pick one upgrade, and stay alive until the
-              timer runs out. One goal: survive the 5-minute sortie and extract. One threat: the endless machine horde.
-              Win: the timer hits zero and you extract. Lose: your hull hits zero. From the results screen, one tap on
-              Retry starts a new run in under 10 seconds.
-            </p>
-          </section>
           <section aria-label="Mode select">
             <Eyebrow className="mb-2">Mode</Eyebrow>
             <div className="grid grid-cols-2 gap-2">
@@ -58,7 +52,9 @@ export function PlayTab({ onStart }: { onStart: (s: StartSpec) => void }) {
                 const on = mode === m.id;
                 const Icon = m.icon;
                 const extra =
-                  m.id === "tower"
+                  m.id === "first"
+                    ? "Survive 60 seconds · win or lose"
+                    : m.id === "tower"
                     ? `Best floor ${save.towerBest}`
                     : m.id === "elite"
                       ? `${Object.values(save.eliteClears).filter(Boolean).length}/3 cleared`
@@ -90,6 +86,18 @@ export function PlayTab({ onStart }: { onStart: (s: StartSpec) => void }) {
               })}
             </div>
           </section>
+
+          {mode === "first" && (
+            <p
+              className="rounded-xl border border-border bg-surface/90 p-3 text-xs leading-relaxed text-muted"
+              data-testid="core-loop"
+            >
+              <span className="font-display text-sm font-semibold text-fg">
+                {CORE_LOOP_NAME} — the 60-second core loop.{" "}
+              </span>
+              {CORE_LOOP}
+            </p>
+          )}
 
           {mode === "elite" && (
             <section aria-label="Elite boss setup" className="rounded-xl border border-border bg-surface/90 p-3">

@@ -9,3 +9,6 @@ export const BUILD_INFO = {
   builtAt: __WP_BUILD_TIME__,
   label: `build ${__WP_BUILD_SHA__} \u00b7 ${__WP_BUILD_TIME__}`,
 } as const;
+
+/** String form of the stamp, as rendered on the menu / pause build-stamp line. */
+export const BUILD_STAMP = BUILD_INFO.label;

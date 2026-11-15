@@ -5,9 +5,9 @@
 
 ## 60-second core loop
 
-**THE 60-SECOND LOOP (verbatim — this is the loop in the live build, and the same words appear on the title screen):** Survive the horde, kill machines, grab their XP, level up and pick one upgrade, and stay alive until the timer runs out. One goal: survive the 5-minute sortie and extract. One threat: the endless machine horde. Win: the timer hits zero and you extract. Lose: your hull hits zero. From the results screen, one tap on Retry starts a new run in under 10 seconds. A sortie is five minutes — five repeats of this same 60-second loop.
+**THE 60-SECOND LOOP (verbatim — this is the loop in the live build, and the same words appear on the title screen):** First Sortie: survive 60 seconds against the machine horde. One goal — stay alive until the extraction timer hits zero. One threat — the horde. Win by surviving to extraction; lose by losing your hull. One tap on Retry restarts in under 10 seconds.
 
-*Note: the Mission 1 drag-to-fly / wingman-command slice in the rest of this sheet is still the plan target; the loop above is what the shipped build actually plays today.*
+*Note: the Mission 1 drag-to-fly / wingman-command slice in the rest of this sheet is still the plan target; the First Sortie loop above is what the shipped build actually plays today — a 60-second mode, with the 5-minute sortie as the longer run.*
 
 ## Control scheme
 

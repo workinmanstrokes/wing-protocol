@@ -16,7 +16,7 @@ import {
   settleTowerFloor,
   type RunPayout,
 } from "@/game/save";
-import { bossRushConfig, eliteConfig, sortieConfig, type RunConfig } from "@/game/meta/modes";
+import { bossRushConfig, eliteConfig, firstSortieConfig, sortieConfig, type RunConfig } from "@/game/meta/modes";
 import { canDoubleExtract } from "@/game/meta/extract";
 import { rewardedAdAvailable, showRewardedAd } from "@/game/meta/ads";
 import { portalCommercialBreak, portalGameplay, portalLoadingFinished } from "@/game/portal";
@@ -63,6 +63,7 @@ interface Outcome {
 }
 
 function configFor(spec: StartSpec): RunConfig {
+  if (spec.kind === "first") return firstSortieConfig();
   if (spec.kind === "elite") return eliteConfig(spec.boss, spec.mods);
   if (spec.kind === "rush") return bossRushConfig();
   if (spec.kind === "tower") return towerFloorConfig(1, "fight", [], 1);
