@@ -4,13 +4,13 @@ import { cn } from "@/lib/utils";
 import { touchMissions } from "@/game/save";
 import { isComplete } from "@/game/meta/missions";
 import { MenuBackground } from "./menu-bg";
-import { BUILD_STAMP } from "@/lib/build-info";
 import { PlayTab, type StartSpec } from "./play-tab";
 import { HangarTab } from "./hangar-tab";
 import { StoreTab } from "./store-tab";
 import { PilotsTab } from "./pilots-tab";
 import { AimAssistToggle, AudioSettings, GraphicsToggle } from "./settings";
 import { Modal, useSave } from "./shared";
+import { BuildStamp } from "@/components/build-stamp";
 
 export type MenuTab = "play" | "hangar" | "store" | "pilots";
 
@@ -75,10 +75,6 @@ export function MainMenu({
         {tab === "pilots" && <PilotsTab onVault={() => setTab("store")} />}
       </main>
 
-      <p className="relative z-10 px-3 pb-1 text-center font-mono text-[10px] text-subtle" data-testid="build-stamp">
-        {BUILD_STAMP}
-      </p>
-
       <nav className="relative z-10 grid grid-cols-4 border-t border-border bg-bg/95" aria-label="Main menu">
         {TABS.map((t) => {
           const Icon = t.icon;
@@ -103,6 +99,7 @@ export function MainMenu({
           );
         })}
       </nav>
+      <BuildStamp className="relative z-10 px-3 py-1.5 text-center text-[11px] text-muted" />
 
       {settings && (
         <Modal label="Settings" onClose={() => setSettings(false)}>

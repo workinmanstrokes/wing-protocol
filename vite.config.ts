@@ -1,4 +1,3 @@
-import { execSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Plugin } from "vite";
@@ -141,19 +140,6 @@ function authPopupPlugin(): Plugin {
   };
 }
 
-/**
- * Short git SHA baked into the build so the on-screen build stamp
- * (src/lib/build-info.ts) names the exact commit running. Falls back to
- * "dev" outside a git checkout (e.g. a source tarball).
- */
-function buildCommit(): string {
-  try {
-    return execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim() || "dev";
-  } catch {
-    return "dev";
-  }
-}
-
 // `0.0.0.0:8080` is the live-preview contract — don't change host/port.
 // The dev server starts once `src/router.tsx` and `src/routes/` exist — see
 // AGENTS.md § "First scaffold".
@@ -162,7 +148,12 @@ function buildCommit(): string {
 const CAPACITOR = process.env.BUILD_TARGET === "capacitor";
 
 export default defineConfig(({ command, isPreview }) => ({
-  define: { __WP_BUILD_COMMIT__: JSON.stringify(buildCommit()) },
+  define: {
+    // Baked into the bundle at build time so the game can stamp itself on screen
+    // (title, pause, results). CI sets GITHUB_SHA automatically; local builds read "dev".
+    __WP_BUILD_SHA__: JSON.stringify((process.env.GITHUB_SHA ?? "dev").slice(0, 7)),
+    __WP_BUILD_TIME__: JSON.stringify(new Date().toISOString().slice(0, 10)),
+  },
   server: {
     host: "0.0.0.0",
     port: 8080,

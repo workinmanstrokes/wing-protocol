@@ -1,14 +1,11 @@
-/**
- * On-screen build/commit stamp (Game Test Lab / VEX 232). The commit short
- * SHA is baked in at build time by vite.config.ts (`__WP_BUILD_COMMIT__`);
- * outside a git checkout it reads "dev". Shown on the main menu and the
- * pause screen so a tester can always say which build they are playing.
- */
-declare const __WP_BUILD_COMMIT__: string | undefined;
+// Build stamp shown on screen (title, pause, results) so a tester can tell which
+// build they are playing. Values are baked in by vite.config.ts `define`:
+// GITHUB_SHA in CI, "dev" for local builds, plus the build date (UTC).
+declare const __WP_BUILD_SHA__: string;
+declare const __WP_BUILD_TIME__: string;
 
-export const BUILD_COMMIT =
-  typeof __WP_BUILD_COMMIT__ === "string" && __WP_BUILD_COMMIT__ ? __WP_BUILD_COMMIT__ : "dev";
-
-export const BUILD_DATE = "2026-11-15";
-
-export const BUILD_STAMP = `Wing Protocol \u00b7 build ${BUILD_COMMIT} \u00b7 ${BUILD_DATE} tester update`;
+export const BUILD_INFO = {
+  sha: __WP_BUILD_SHA__,
+  builtAt: __WP_BUILD_TIME__,
+  label: `build ${__WP_BUILD_SHA__} \u00b7 ${__WP_BUILD_TIME__}`,
+} as const;

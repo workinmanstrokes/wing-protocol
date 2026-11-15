@@ -16,7 +16,7 @@ import {
   settleTowerFloor,
   type RunPayout,
 } from "@/game/save";
-import { bossRushConfig, eliteConfig, firstSortieConfig, sortieConfig, type RunConfig } from "@/game/meta/modes";
+import { bossRushConfig, eliteConfig, sortieConfig, type RunConfig } from "@/game/meta/modes";
 import { canDoubleExtract } from "@/game/meta/extract";
 import { rewardedAdAvailable, showRewardedAd } from "@/game/meta/ads";
 import { portalCommercialBreak, portalGameplay, portalLoadingFinished } from "@/game/portal";
@@ -31,11 +31,11 @@ import {
 } from "@/game/meta/tower";
 import type { HudState, MechId, PerkId, RunResult } from "@/game/types";
 import { MainMenu, type MenuTab } from "@/components/menu/main-menu";
-import { BUILD_STAMP } from "@/lib/build-info";
 import { MenuBackground } from "@/components/menu/menu-bg";
 import type { StartSpec } from "@/components/menu/play-tab";
 import { AimAssistToggle, AudioSettings, GraphicsToggle } from "@/components/menu/settings";
 import { Eyebrow, MechPortrait, RewardLine, rarityClass, useSave } from "@/components/menu/shared";
+import { BuildStamp } from "@/components/build-stamp";
 
 type Screen = "menu" | "combat" | "results" | "tower";
 
@@ -63,7 +63,6 @@ interface Outcome {
 }
 
 function configFor(spec: StartSpec): RunConfig {
-  if (spec.kind === "first") return firstSortieConfig();
   if (spec.kind === "elite") return eliteConfig(spec.boss, spec.mods);
   if (spec.kind === "rush") return bossRushConfig();
   if (spec.kind === "tower") return towerFloorConfig(1, "fight", [], 1);
@@ -718,15 +717,13 @@ function PauseMenu({
         <AudioSettings className="mt-5" muted={muted} setMuted={setMuted} />
         <GraphicsToggle className="mt-4" />
         <AimAssistToggle className="mt-4" />
-        <p className="mt-4 text-center font-mono text-[10px] text-subtle" data-testid="build-stamp">
-          {BUILD_STAMP}
-        </p>
         <div className="mt-5 flex flex-col gap-2">
           <Button onClick={onResume}>Resume</Button>
           <Button variant="secondary" onClick={onQuit}>
             Abort run
           </Button>
         </div>
+        <BuildStamp className="mt-4 text-center text-[11px] text-muted" />
       </div>
     </div>
   );
@@ -859,6 +856,7 @@ function Results({
           Main menu
         </Button>
       </div>
+      <BuildStamp className="shrink-0 border-t border-border bg-surface px-4 py-1.5 text-center text-[11px] text-muted" />
     </div>
   );
 }

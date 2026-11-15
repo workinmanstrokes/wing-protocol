@@ -105,10 +105,13 @@ function VolumeSlider({ label, id, value, onChange, disabled }: { label: string;
 export function AudioSettings({ muted, setMuted, className }: { muted: boolean; setMuted: (v: boolean) => void; className?: string }) {
   const [music, setMusic] = useState(0.7);
   const [sfx, setSfx] = useState(0.85);
+  const [audioStatus, setAudioStatus] = useState<{ loaded: number; total: number; failed: string[] } | null>(null);
+  const refreshAudio = () => setAudioStatus(gameAudio.audioStatus());
   useEffect(() => {
     const p = gameAudio.getPrefs();
     setMusic(p.music);
     setSfx(p.sfx);
+    refreshAudio();
   }, []);
   return (
     <div className={className}>
@@ -151,6 +154,28 @@ export function AudioSettings({ muted, setMuted, className }: { muted: boolean; 
           gameAudio.ui("click");
         }}
       />
+      {/* Sound check: verifies on a fresh phone/browser load whether the audio folder actually
+        loaded, and retries the files that failed instead of staying silent. */}
+      <p className="mt-2 text-[11px] text-muted" data-testid="audio-status">
+        {audioStatus
+          ? audioStatus.failed.length > 0
+            ? `Audio: ${audioStatus.loaded}/${audioStatus.total} sounds loaded — ${audioStatus.failed.length} failed to load.`
+            : `Audio: ${audioStatus.loaded}/${audioStatus.total} sounds loaded.`
+          : "Audio: not started yet — tap anywhere to unlock sound."}
+      </p>
+      {audioStatus && audioStatus.failed.length > 0 && (
+        <button
+          type="button"
+          data-testid="audio-retry"
+          onClick={() => {
+            gameAudio.retryFailed();
+            setTimeout(refreshAudio, 1500);
+          }}
+          className="mt-2 min-h-10 rounded-md border border-border px-3 text-xs font-semibold text-fg"
+        >
+          Retry loading audio
+        </button>
+      )}
     </div>
   );
 }
