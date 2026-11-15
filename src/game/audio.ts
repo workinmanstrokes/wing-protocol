@@ -214,14 +214,41 @@ export class GameAudio {
     return `${this.base}audio/${path}.${this.ext}`;
   }
 
+  /**
+   * Candidate URLs for one audio file, best first. The first is the Vite
+   * base (right in dev, Capacitor and normal deploys). The second resolves
+   * against the page that actually served the app: the live test site serves
+   * the build under a snapshot sub-path, where an absolute "/audio/..."
+   * misses the snapshot route and 404s while the page-relative "audio/..."
+   * loads. `load()` tries each in turn; the first that answers wins.
+   */
+  private urls(path: string): string[] {
+    const rel = `audio/${path}.${this.ext}`;
+    const primary = `${this.base}${rel}`;
+    if (typeof document === "undefined") return [primary];
+    try {
+      const doc = new URL(rel, document.baseURI).href;
+      return doc === primary ? [primary] : [primary, doc];
+    } catch {
+      return [primary];
+    }
+  }
+
   private load(path: string): Promise<AudioBuffer | null> {
     const hit = this.loading.get(path);
     if (hit) return hit;
     const p = (async () => {
       if (!this.ctx) return null;
       try {
-        const res = await fetch(this.url(path));
-        if (!res.ok) return null;
+        let res: Response | null = null;
+        for (const u of this.urls(path)) {
+          const r = await fetch(u);
+          if (r.ok) {
+            res = r;
+            break;
+          }
+        }
+        if (!res) return null;
         const data = await res.arrayBuffer();
         const buf = await new Promise<AudioBuffer>((resolve, reject) => {
           // callback form for older Safari

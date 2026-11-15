@@ -60,6 +60,28 @@ export function sortieConfig(): RunConfig {
   return { ...BASE_CONFIG };
 }
 
+/**
+ * First Sortie — the named 60-second core loop (Game Test Lab / VEX 229).
+ * One goal (survive until the extraction timer hits zero), one threat (the
+ * machine horde), one win state and one lose state, instant restart.
+ * Combat already ends a run at the timer (`time >= duration` wins when the
+ * mode is not a boss-kill mode) and on hull loss, so a 60-second,
+ * unscripted, boss-free sortie is a complete loop with no combat changes.
+ * Scripted bosses/uplinks/sectors stay in the 5-minute sortie.
+ */
+export function firstSortieConfig(): RunConfig {
+  return {
+    ...BASE_CONFIG,
+    label: "First Sortie · 60 seconds",
+    duration: 60,
+    sector: 0,
+    scripted: false,
+    intensity0: 0,
+    spawnRate: 0.9,
+    rewardMult: 0.5,
+  };
+}
+
 /* ------------------------------ elite bosses ------------------------------ */
 
 export const ELITE_BOSSES: { id: BossKind; name: string; sector: number; blurb: string }[] = [

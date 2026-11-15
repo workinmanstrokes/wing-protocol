@@ -17,6 +17,37 @@
     w.addEventListener('load', function () {
       navigator.serviceWorker.register('sw.js').then(function (reg) {
         reg.update && reg.update();
+        // Update prompt: when a new worker is waiting, offer one tap to
+        // reload into it instead of leaving the home-screen install on the
+        // old build (no delete-and-re-add). The worker's SKIP_WAITING
+        // handler (sw.js) takes over; controllerchange reloads once.
+        function promptUpdate(worker) {
+          if (!worker || d.getElementById('wp-update-banner')) return;
+          var bar = d.createElement('div');
+          bar.id = 'wp-update-banner';
+          bar.setAttribute('role', 'status');
+          bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:9999;display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:12px;background:#18181b;color:#fafafa;font:600 14px/1.3 system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.45)';
+          bar.textContent = 'A new Wing Protocol build is ready.';
+          var btn = d.createElement('button');
+          btn.type = 'button';
+          btn.textContent = 'Reload to update';
+          btn.style.cssText = 'flex:none;padding:10px 14px;border:0;border-radius:8px;background:#e8c84a;color:#18181b;font:700 14px system-ui,sans-serif';
+          btn.onclick = function () { worker.postMessage({ type: 'SKIP_WAITING' }); };
+          bar.appendChild(btn);
+          d.body.appendChild(bar);
+        }
+        if (reg.waiting) promptUpdate(reg.waiting);
+        reg.addEventListener('updatefound', function () {
+          var nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', function () {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) promptUpdate(nw);
+          });
+        });
+        var reloaded = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          if (!reloaded) { reloaded = true; w.location.reload(); }
+        });
       }).catch(function () {});
     });
   }

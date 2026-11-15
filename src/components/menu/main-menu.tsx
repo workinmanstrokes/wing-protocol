@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { touchMissions } from "@/game/save";
 import { isComplete } from "@/game/meta/missions";
 import { MenuBackground } from "./menu-bg";
+import { BUILD_STAMP } from "@/lib/build-info";
 import { PlayTab, type StartSpec } from "./play-tab";
 import { HangarTab } from "./hangar-tab";
 import { StoreTab } from "./store-tab";
@@ -73,6 +74,10 @@ export function MainMenu({
         {tab === "store" && <StoreTab />}
         {tab === "pilots" && <PilotsTab onVault={() => setTab("store")} />}
       </main>
+
+      <p className="relative z-10 px-3 pb-1 text-center font-mono text-[10px] text-subtle" data-testid="build-stamp">
+        {BUILD_STAMP}
+      </p>
 
       <nav className="relative z-10 grid grid-cols-4 border-t border-border bg-bg/95" aria-label="Main menu">
         {TABS.map((t) => {
