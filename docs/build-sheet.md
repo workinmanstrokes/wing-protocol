@@ -62,3 +62,46 @@ plus the minimum API level. The slice is tuned for the low-end phone first:
 60 fps target, no per-frame allocations in the hot loop, capped particle
 counts, and a "Low detail" setting that drops background layers. The minimum
 device and API level are locked in writing once both test phones pass.
+
+## Tester fix list — Game Test Lab 2.5/10 (grade F)
+
+The retest verdict was: a live but undescribed TypeScript build with no
+stated core loop, no sound, and a manual-reinstall update. The loop is now
+named above and on the title screen; the other two items were fixed as
+follows (this section is the build note for the replay hook too).
+
+**1. Audio delivery — bundled first, hosted as fallback.** The audio
+loader (`src/game/audio.ts`) now tries, in order: bundled assets from
+`src/assets/audio/` (Vite emits them as hashed files next to the JS bundle,
+so they load wherever the bundle loads, with no separate `/audio` route);
+`public/audio/` (Vite base, plus the page-relative candidate for snapshot
+sub-paths); then the same files hosted on `raw.githubusercontent.com` for
+this repo, as a last resort only — offline PWA and Capacitor builds still
+use local audio first. The binary move of the `.ogg`/`.mp3` files from
+`public/audio/` into `src/assets/audio/` is still pending (it needs a
+`git mv` — see `src/assets/audio/README.md`); until it happens the glob
+matches nothing and sound comes from the local/hosted candidates.
+
+**2. Home-screen update path — version check, no delete-and-re-add.** The
+service worker was already v2 with an update prompt (`public/sw.js`,
+`public/ios.js`); this update bumps the runtime worker to v3 (activating
+deletes every old cache) and adds a version check that does not depend on
+the worker at all: `public/ios.js` fetches the live page HTML with the
+cache bypassed every 60 seconds and on foregrounding, compares the hashed
+build assets (`/_build/assets/*.js|css`) it references with the ones the
+running page loaded, and shows the same one-tap "Reload to update" banner
+when they differ. Verify by installing the old build on the home screen,
+then loading the new one — the banner should appear without deleting and
+re-adding the icon.
+
+**3. Replay hook — persistent First Sortie best score.** Every First
+Sortie run now records its kills as a persistent best
+(`firstSortieBestKills`, saved in localStorage with the rest of the save).
+The First Sortie card on the Play tab shows "Best N kills" once a best
+exists, and the results screen shows a "Best" stat plus "Mission complete ·
+new best" when a run beats it. A 5-minute sortie never moves this best.
+Test: `src/game/meta/first-sortie.test.ts` (best updates, worse runs and
+5-minute sorties leave it alone, migration preserves it).
+
+**Still to verify on the test site (not verified by this push):** sound on
+a fresh load, and the install-old / load-new update check above.

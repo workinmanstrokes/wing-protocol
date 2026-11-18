@@ -152,6 +152,9 @@ export interface SaveData {
   equipped: Partial<Record<GearSlot, string>>;
   highKills: number;
   bestTime: number;
+  /** Best kills in one First Sortie (60-second loop) run — the persistent
+   * replay hook for that loop. 0 until the first First Sortie is played. */
+  firstSortieBestKills: number;
   sorties: number;
   freeCrateAt: number;
   adCrates: { day: string; n: number };

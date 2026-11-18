@@ -1,6 +1,6 @@
-import type { GearItem, GearSlot, MechId, Reward, RunResult, SaveData } from "./types";
-import { INVENTORY_CAP, defaultSave, migrateSave } from "./meta/save-migrate";
-import { upgradeCost } from "./meta/gear";
+import type { GearItem, GearSlot, MechId, Reward, RunResult, SaveData } from "./types.ts";
+import { INVENTORY_CAP, defaultSave, migrateSave } from "./meta/save-migrate.ts";
+import { upgradeCost } from "./meta/gear.ts";
 import {
   AD_CRATES_PER_DAY,
   CRATES,
@@ -12,12 +12,12 @@ import {
   type CrateDef,
   type GearDrop,
   type VaultResult,
-} from "./meta/crates";
-import { applyMissionEvents, claimMission, dayKey, refreshMissions, type MissionEvent } from "./meta/missions";
-import { capBossCores, eliteReward, type BossKind } from "./meta/modes";
-import { floorCredits, towerMilestoneCores } from "./meta/tower";
-import { bumpExtract, canDoubleExtract, extractAdsLeft } from "./meta/extract";
-import { MECH_MAP } from "./data";
+} from "./meta/crates.ts";
+import { applyMissionEvents, claimMission, dayKey, refreshMissions, type MissionEvent } from "./meta/missions.ts";
+import { capBossCores, eliteReward, type BossKind } from "./meta/modes.ts";
+import { floorCredits, towerMilestoneCores } from "./meta/tower.ts";
+import { bumpExtract, canDoubleExtract, extractAdsLeft } from "./meta/extract.ts";
+import { MECH_MAP } from "./data.ts";
 
 /** Same storage key as v1 so existing saves are found and migrated in place. */
 const KEY = "wing-protocol-save-v1";
@@ -257,14 +257,20 @@ function runEvents(r: RunResult): MissionEvent[] {
   ];
 }
 
-/** Settle a finished sortie. */
-export function settleSortie(r: RunResult): RunPayout {
+/**
+ * Settle a finished sortie. `firstSortie` marks a run of the 60-second First
+ * Sortie loop: its kills are also tracked as a persistent best score (the
+ * replay hook for that loop — beat your best kills, then survive to extract),
+ * and the return reports whether this run set a new best.
+ */
+export function settleSortie(r: RunResult, firstSortie = false): RunPayout & { newFirstSortieBest: boolean } {
   const dupShards = addLoot(r.credits, r.keys, r.loot);
   const cores = (r.survived ? 3 : 0) + (r.bossKills ?? 0);
   const earned = 5 * (r.bossKills ?? 0) + (r.survived ? 10 : 0);
   const shards = dupShards + earned;
   const ev = runEvents(r);
   if (r.survived) ev.push({ kind: "sortie_wins", amount: 1 });
+  const newFirstSortieBest = firstSortie && r.kills > 0 && r.kills > state.firstSortieBestKills;
   set(
     withMissions(
       {
@@ -273,13 +279,14 @@ export function settleSortie(r: RunResult): RunPayout {
         shards: state.shards + earned,
         highKills: Math.max(state.highKills, r.kills),
         bestTime: Math.max(state.bestTime, r.time),
+        firstSortieBestKills: newFirstSortieBest ? r.kills : state.firstSortieBestKills,
         sorties: state.sorties + 1,
         stats: { ...state.stats, bossKills: state.stats.bossKills + (r.bossKills ?? 0) },
       },
       ev,
     ),
   );
-  return { credits: r.credits, keys: r.keys, cores, shards, newItems: r.loot.length };
+  return { credits: r.credits, keys: r.keys, cores, shards, newItems: r.loot.length, newFirstSortieBest };
 }
 
 /** Extract-ad uses left today. */

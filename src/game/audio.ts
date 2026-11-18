@@ -8,11 +8,35 @@
  * - Music: original, pre-rendered seamless loops. Menu has its own loop; combat
  *   is two stems on the same grid (base + top) — the top stem fades in with the
  *   fight's intensity. Scene changes crossfade.
+ * - Delivery: bundled assets first (src/assets/audio/, emitted by Vite as
+ *   hashed files next to the JS bundle, so they load wherever the bundle
+ *   loads), then public/audio/ (Vite base, plus a page-relative candidate for
+ *   snapshot sub-paths), then the same files hosted on raw.githubusercontent.com
+ *   for this repo — last, so offline PWA and Capacitor builds keep using
+ *   local audio first.
  * - Mobile: the AudioContext is created/resumed on the first user gesture and
  *   suspended while the page/app is hidden.
  * - Volumes (master mute, music, sfx) persist in localStorage.
  */
 import { MUSIC, SFX, type MusicId, type SfxId } from "./audio-manifest";
+
+/**
+ * Bundled audio URLs, keyed by logical path + extension (e.g.
+ * "sfx/fire_beam_0.ogg"). Files under src/assets/audio/ are emitted by Vite
+ * as hashed assets next to the JS bundle (import.meta.glob, ?url), so they
+ * load wherever the bundle loads — no separate /audio route is needed, which
+ * is what the live test site's snapshot route fails to serve. The folder is
+ * empty until the .ogg/.mp3 files are moved there from public/audio/ (a binary
+ * move, done with git mv — see src/assets/audio/README.md); until then this
+ * map is empty and the public/audio + hosted candidates in urls() serve sound.
+ */
+const BUNDLED_AUDIO: Record<string, string> = {};
+for (const [key, url] of Object.entries(
+  import.meta.glob("../assets/audio/**/*.{ogg,mp3}", { eager: true, query: "?url", import: "default" }),
+)) {
+  const m = key.match(/\/assets\/audio\/(.+)\.(ogg|mp3)$/);
+  if (m) BUNDLED_AUDIO[`${m[1]}.${m[2]}`] = url as string;
+}
 
 export type AudioPrefs = { muted: boolean; music: number; sfx: number };
 const PREFS_KEY = "wp.audio.v1";
@@ -246,23 +270,38 @@ export class GameAudio {
   }
 
   /**
-   * Candidate URLs for one audio file, best first. The first is the Vite
-   * base (right in dev, Capacitor and normal deploys). The second resolves
-   * against the page that actually served the app: the live test site serves
-   * the build under a snapshot sub-path, where an absolute "/audio/..." 
-   * misses the snapshot route and 404s while the page-relative "audio/..." 
-   * loads. `load()` tries each in turn; the first that answers wins.
+   * Candidate URLs for one audio file, best first.
+   * 1. Bundled asset (src/assets/audio/) when the file has been moved there:
+   *    a hashed URL next to the JS bundle, so it loads wherever the bundle
+   *    loads — including the test site's snapshot route.
+   * 2. The Vite base (right in dev, Capacitor and normal deploys).
+   * 3. Page-relative: the live test site serves the build under a snapshot
+   *    sub-path, where an absolute "/audio/..." misses the snapshot route
+   *    and 404s while the page-relative "audio/..." loads.
+   * 4. Hosted: the same file on raw.githubusercontent.com for this repo.
+   *    Last, so offline PWA and Capacitor builds keep using local audio
+   *    first; it only rescues a host whose snapshot route drops /audio.
+   * `load()` tries each in turn; the first that answers wins.
    */
   private urls(path: string): string[] {
+    const ext = this.ext;
+    const out: string[] = [];
+    const bundled = BUNDLED_AUDIO[`${path}.${ext}`];
+    if (bundled) out.push(bundled);
     const primary = this.url(path);
-    if (typeof document === "undefined") return [primary];
-    try {
-      const rel = `audio/${path}.${this.ext}`;
-      const doc = new URL(rel, document.baseURI).href;
-      return doc === primary ? [primary] : [primary, doc];
-    } catch {
-      return [primary];
+    out.push(primary);
+    if (typeof document !== "undefined") {
+      try {
+        const rel = `audio/${path}.${ext}`;
+        const doc = new URL(rel, document.baseURI).href;
+        if (doc !== primary && !out.includes(doc)) out.push(doc);
+      } catch {
+        // fall through to the hosted candidate
+      }
     }
+    const hosted = `https://raw.githubusercontent.com/workinmanstrokes/wing-protocol/main/public/audio/${path}.${ext}`;
+    if (!out.includes(hosted)) out.push(hosted);
+    return out;
   }
 
   private load(path: string): Promise<AudioBuffer | null> {

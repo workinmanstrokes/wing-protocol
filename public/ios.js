@@ -52,17 +52,72 @@
     bar.appendChild(later);
     d.body.appendChild(bar);
   }
+  // Version check, independent of the service worker: a home-screen install
+  // can sit on a stale worker/HTML, so poll the live page HTML itself with
+  // the cache bypassed and compare the hashed build assets it references
+  // (/_build/assets/*.js|css) with the ones this page actually loaded. A
+  // mismatch means a newer build is deployed; offer the same one-tap reload
+  // (no delete-and-re-add). Same-origin and relative, so it works on
+  // snapshot sub-paths too; a fetch failure (offline) is silently ignored.
+  var versionWorker = null; // set when a new service worker is waiting
+  function buildAssets(urls) {
+    var out = {}, i, u;
+    for (i = 0; i < urls.length; i++) {
+      u = urls[i];
+      if (!u) continue;
+      try { u = new URL(u, location.href).href.split('?')[0].split('#')[0]; } catch (e) { continue; }
+      if (u.indexOf('/assets/') !== -1 && /\.(js|css)$/.test(u)) out[u] = true;
+    }
+    return out;
+  }
+  function liveBuildAssets() {
+    var urls = [], i;
+    for (i = 0; i < d.scripts.length; i++) urls.push(d.scripts[i].src);
+    var links = d.querySelectorAll ? d.querySelectorAll('link[rel="stylesheet"]') : [];
+    for (i = 0; i < links.length; i++) urls.push(links[i].href);
+    return buildAssets(urls);
+  }
+  function checkVersion() {
+    if (!topLevel || native || capHost) return;
+    var href = location.href.split('#')[0];
+    fetch(href, { cache: 'no-store', credentials: 'same-origin' }).then(function (r) {
+      return r.ok ? r.text() : '';
+    }).then(function (html) {
+      if (!html) return;
+      // Only the assets the live page actually loads count: <script src>
+      // and stylesheet <link href>. Preload/modulepreload links in the HTML
+      // must be ignored, or they would look like a newer build on every load.
+      var found = [], m, tagRe = /<(script|link)\b[^>]*>/g, attrRe = /(?:src|href)="([^"]+\.(?:js|css))[^"]*"/;
+      while ((m = tagRe.exec(html))) {
+        if (m[1] === 'link' && m[0].indexOf('stylesheet') === -1) continue;
+        var a = attrRe.exec(m[0]);
+        if (a) found.push(a[1]);
+      }
+      var live = liveBuildAssets(), next = buildAssets(found), changed = false, k, liveCount = 0, nextCount = 0;
+      for (k in live) liveCount++;
+      for (k in next) nextCount++;
+      if (!liveCount || !nextCount) return; // nothing comparable (dev / error page)
+      for (k in next) if (!live[k]) { changed = true; break; }
+      if (!changed) for (k in live) if (!next[k]) { changed = true; break; }
+      if (changed) {
+        // Prefer activating the waiting worker; otherwise a plain reload
+        // fetches the new hashed assets (the worker is network-first).
+        promptUpdate(versionWorker || { postMessage: function () { w.location.reload(); } });
+      }
+    }).catch(function () {});
+  }
+
   if (!native && !capHost && topLevel && 'serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     w.addEventListener('load', function () {
       navigator.serviceWorker.register(swUrl).then(function (reg) {
         reg.update && reg.update();
-        if (reg.waiting) promptUpdate(reg.waiting);
+        if (reg.waiting) { versionWorker = reg.waiting; promptUpdate(reg.waiting); }
         reg.addEventListener('updatefound', function () {
           var nw = reg.installing;
           if (!nw) return;
           nw.addEventListener('statechange', function () {
             // A new worker is ready while an old one still controls this page.
-            if (nw.state === 'installed' && navigator.serviceWorker.controller) promptUpdate(nw);
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) { versionWorker = nw; promptUpdate(nw); }
           });
         });
         var reloaded = false;
@@ -71,9 +126,12 @@
         });
         // An old home-screen install only discovers the new build when the worker is
         // re-checked: poll while the page is open, and on every foregrounding.
-        var check = function () { try { reg.update && reg.update(); } catch (e) {} };
+        // The same poll runs the version check (live HTML asset hashes), which
+        // catches a new build even when the worker update itself stalls.
+        var check = function () { try { reg.update && reg.update(); } catch (e) {} checkVersion(); };
         w.setInterval(check, 60000);
         d.addEventListener('visibilitychange', function () { if (!d.hidden) check(); });
+        check(); // check once on load, not only after 60s
       }).catch(function () {});
     });
   }

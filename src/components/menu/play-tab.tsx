@@ -53,7 +53,9 @@ export function PlayTab({ onStart }: { onStart: (s: StartSpec) => void }) {
                 const Icon = m.icon;
                 const extra =
                   m.id === "first"
-                    ? "Survive 60 seconds · win or lose"
+                    ? save.firstSortieBestKills > 0
+                      ? `Best ${save.firstSortieBestKills} kills · survive 60 seconds`
+                      : "Survive 60 seconds · win or lose"
                     : m.id === "tower"
                     ? `Best floor ${save.towerBest}`
                     : m.id === "elite"

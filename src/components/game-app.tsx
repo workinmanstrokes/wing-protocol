@@ -60,6 +60,8 @@ interface Outcome {
   payout: RunPayout;
   label: string;
   tower?: { cleared: number; best: boolean };
+  /** First Sortie only: the persistent best-kills replay hook for the loop. */
+  firstSortie?: { best: boolean; bestKills: number };
 }
 
 function configFor(spec: StartSpec): RunConfig {
@@ -189,10 +191,19 @@ export function GameApp() {
       return;
     }
     let payout: RunPayout;
+    let firstSortie: Outcome["firstSortie"];
     if (spec.kind === "elite") payout = settleBossFight(r, spec.boss, spec.mods);
     else if (spec.kind === "rush") payout = settleBossFight(r, "rush", []);
-    else payout = settleSortie(r);
-    setOutcome({ result: r, payout, label: cur.cfg.label });
+    else {
+      const p = settleSortie(r, spec.kind === "first");
+      payout = p;
+      if (spec.kind === "first")
+        firstSortie = {
+          best: p.newFirstSortieBest,
+          bestKills: getSave().firstSortieBestKills,
+        };
+    }
+    setOutcome({ result: r, payout, label: cur.cfg.label, firstSortie });
     setScreen("results");
   };
   const onOverRef = useRef(onOver);
@@ -741,7 +752,7 @@ function Results({
   onHangar: () => void;
   onAgain: () => void;
 }) {
-  const { result, payout, tower } = outcome;
+  const { result, payout, tower, firstSortie } = outcome;
   const save = useSave();
   const mech = MECH_MAP[save.selected];
   const t = Math.floor(result.time);
@@ -751,9 +762,7 @@ function Results({
   const offer2x = !tower && canDoubleExtract(result) && !bonus;
   const title = tower
     ? `${tower.cleared} floor${tower.cleared === 1 ? "" : "s"} cleared${tower.best ? " · new best" : ""}`
-    : result.survived
-      ? "Mission complete"
-      : "Mission failed";
+    : `${result.survived ? "Mission complete" : "Mission failed"}${firstSortie?.best ? " · new best" : ""}`;
   const stats: { label: string; value: string }[] = tower
     ? []
     : [
@@ -767,6 +776,7 @@ function Results({
               { label: "Uplinks", value: `${result.uplinks ?? 0}/3` },
             ]
           : []),
+        ...(firstSortie ? [{ label: "Best", value: `${firstSortie.bestKills} kills` }] : []),
       ];
   return (
     <div className="flex h-full min-h-0 flex-col bg-bg" data-testid="results">
