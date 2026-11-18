@@ -64,3 +64,34 @@ test("edge marks avoid the aim stick, minimap, timer, and hull", () => {
     }
   }
 });
+
+test("squad buttons stay clear of the readout, timer, minimap, skill button and the ship", async () => {
+  const { squadBarRect } = await import("./hud-layout.ts");
+  for (const v of [...VIEWS, { name: "small portrait", w: 360, h: 640 }, { name: "small landscape", w: 740, h: 360 }]) {
+    const squad = squadBarRect(v.w, v.h);
+    assert.equal(rectsOverlap(squad, hullReadoutRect(v.w, v.h), 8), false, `${v.name} hull`);
+    assert.equal(rectsOverlap(squad, timerRect(v.w, v.h), 8), false, `${v.name} timer`);
+    assert.equal(rectsOverlap(squad, skillButtonRect(v.w, v.h), 8), false, `${v.name} skill`);
+    assert.equal(rectsOverlap(squad, comboPopupRect(v.w, v.h), 8), false, `${v.name} combo`);
+    const mm = minimapCenter(v.w);
+    const cx = Math.max(squad.x, Math.min(squad.x + squad.w, mm.cx));
+    const cy = Math.max(squad.y, Math.min(squad.y + squad.h, mm.cy));
+    assert.ok(Math.hypot(cx - mm.cx, cy - mm.cy) > mm.r, `${v.name} minimap`);
+    // the player's ship sits near the screen centre: keep the buttons off it
+    const ship = { x: v.w / 2 - 40, y: v.h / 2 - 40, w: 80, h: 80 };
+    assert.equal(rectsOverlap(squad, ship, 0), false, `${v.name} ship`);
+  }
+});
+
+test("threat marks never land on the squad buttons", async () => {
+  const { squadBarRect, pointInRect } = await import("./hud-layout.ts");
+  for (const v of VIEWS) {
+    const squad = squadBarRect(v.w, v.h);
+    for (let y = 0; y <= v.h; y += 23) {
+      for (const x of [-50, squad.x + 5, squad.x + squad.w / 2]) {
+        const p = clampThreatMark(x, y, v.w, v.h);
+        assert.equal(pointInRect(p.x, p.y, squad, 0), false, `${v.name} ${x},${y}`);
+      }
+    }
+  }
+});

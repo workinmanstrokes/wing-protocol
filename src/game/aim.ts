@@ -1,10 +1,16 @@
 /**
- * Aim assist. Aiming is player-driven (mouse, right thumb stick, gamepad);
- * "light" only nudges a shot toward an enemy already inside a small cone
- * in front of where the player is aiming. It never picks targets on its own.
+ * Aim assist. Three settings:
+ * - "auto" (phone default): when you are not aiming yourself, the guns lock
+ *   onto the nearest threat (bosses and elites first) so one thumb can play.
+ *   Drag the aim stick and you take over; let go and auto picks up again.
+ * - "light": you aim; shots get a small nudge toward an enemy already inside
+ *   a narrow cone around the crosshair. Never picks targets on its own.
+ * - "off": pure manual aim.
  */
 
-export type AimAssistPref = "off" | "light";
+export type AimAssistPref = "off" | "light" | "auto";
+
+export const AIM_ASSIST_PREFS: readonly AimAssistPref[] = ["off", "light", "auto"];
 
 const AKEY = "wing-protocol-aim-assist";
 
@@ -38,7 +44,7 @@ export function smoothAim(current: number, target: number, dt: number): number {
 
 export function defaultAimAssist(): AimAssistPref {
   try {
-    if (typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches) return "light";
+    if (typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches) return "auto";
   } catch {
     /* no matchMedia */
   }
@@ -51,7 +57,7 @@ export function getAimAssistPref(): AimAssistPref {
   if (cached) return cached;
   try {
     const v = localStorage.getItem(AKEY);
-    if (v === "off" || v === "light") return (cached = v);
+    if (v === "off" || v === "light" || v === "auto") return (cached = v);
   } catch {
     /* storage blocked */
   }
@@ -103,4 +109,44 @@ export function applyAimAssist(aim: number, px: number, py: number, targets: Ite
     }
   }
   return found ? aim + best * assistPull(best) : aim;
+}
+
+type AutoTarget = Target & { boss?: boolean; elite?: string };
+
+/** How hard auto aim turns the guns toward its target (per second, exponential). */
+export const AUTO_TURN_RATE = 22;
+
+/**
+ * Auto aim target: the nearest threat within `range`, with bosses and elites
+ * counted as a bit closer than they are. Sticks with `current` while it stays
+ * alive and in range unless another target is clearly closer, so the guns do
+ * not jitter between two enemies at similar distance.
+ */
+export function pickAutoTarget<T extends AutoTarget>(
+  px: number,
+  py: number,
+  targets: Iterable<T>,
+  range: number,
+  current: T | null,
+): T | null {
+  const score = (t: T) => {
+    const d = Math.hypot(t.x - px, t.y - py);
+    if (d > range) return Infinity;
+    return d / range - (t.boss ? 0.25 : t.elite ? 0.12 : 0);
+  };
+  let best: T | null = null;
+  let bestScore = Infinity;
+  for (const t of targets) {
+    if (!t.alive) continue;
+    const sc = score(t);
+    if (sc < bestScore) {
+      bestScore = sc;
+      best = t;
+    }
+  }
+  if (current && current.alive) {
+    const cs = score(current);
+    if (cs < Infinity && cs <= bestScore + 0.15) return current;
+  }
+  return best;
 }

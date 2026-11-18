@@ -70,6 +70,27 @@ export function skillButtonRect(w: number, h: number): Rect {
   return { x: w - right - size, y: h - bottom - size, w: size, h: size };
 }
 
+/**
+ * Wingman order buttons on a phone, matching SquadBar's touch classes in
+ * game-app: a column of three 52x44 buttons above the move stick in portrait,
+ * a row above the resting move stick in landscape.
+ */
+export function squadBarRect(w: number, h: number): Rect {
+  const bw = 52;
+  const bh = 44;
+  const gap = 8;
+  if (isLandscape(w, h)) {
+    const left = 12;
+    const bottom = 160;
+    const width = bw * 3 + gap * 2;
+    return { x: left, y: h - bottom - bh, w: width, h: bh };
+  }
+  const left = 12;
+  const bottom = h * 0.46 + 12;
+  const height = bh * 3 + gap * 2;
+  return { x: left, y: h - bottom - height, w: bw, h: height };
+}
+
 export function rectsOverlap(a: Rect, b: Rect, pad = 0): boolean {
   return a.x < b.x + b.w + pad && a.x + a.w + pad > b.x && a.y < b.y + b.h + pad && a.y + a.h + pad > b.y;
 }
@@ -125,6 +146,10 @@ export function clampThreatMark(sx: number, sy: number, w: number, h: number): {
   const skill = skillButtonRect(w, h);
   if (pointInRect(p.x, p.y, skill, 10)) {
     p = clampToRect(p.x, skill.y - 14, safe);
+  }
+  const squad = squadBarRect(w, h);
+  if (pointInRect(p.x, p.y, squad, 10)) {
+    p = clampToRect(squad.x + squad.w + 14, p.y, safe);
   }
   const sticks = stickBandRect(w, h);
   if (pointInRect(p.x, p.y, sticks, 0)) {

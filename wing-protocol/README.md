@@ -24,6 +24,14 @@ slice tested on two real Android phones.
   types, 1 elite/boss, win/lose, restart in under 10 seconds, and
   wingman/Protocol squad commands in the first 30 seconds.
 
+## Stack decision (default taken)
+
+Open question #1 was answered with the default: **stay on the TypeScript /
+React / Capacitor codebase at the repo root**, no Godot migration. The
+vertical slice's one differentiator, wingmen with Focus / Spread / Regroup
+squad commands, now lives in `src/game/squad.ts` and `src/game/combat.ts`.
+This folder is kept only as the plan record; nothing builds from it.
+
 ## Why this is a subfolder
 
 The plan's starter skeleton assumes Godot 4, but the existing project at the

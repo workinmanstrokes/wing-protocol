@@ -1,22 +1,30 @@
 # Wing Protocol — Build Sheet (one page)
 
 **Game:** Wing Protocol — mobile arcade shooter, Android.
-**Tester score this sheet answers:** 3.5/10 (grade D); retested by VEX at 2.5/10 (grade F) — the live build had no describable loop. **Status:** vertical slice in progress; the loop below now describes the shipped build as tested, and the same words appear on the title screen.
+**Tester score this sheet answers:** 3.5/10 (grade D); retested by VEX at 2.5/10 (grade F) — the live build had no describable loop. **Status:** wingmen and squad commands shipped; two-phone test still to do; the loop below now describes the shipped build as tested, and the same words appear on the title screen.
 
 ## 60-second core loop
 
 **THE 60-SECOND LOOP (verbatim — this is the loop in the live build, and the same words appear on the title screen):** First Sortie: survive 60 seconds against the machine horde. One goal — stay alive until the extraction timer hits zero. One threat — the horde. Win by surviving to extraction; lose by losing your hull. One tap on Retry restarts in under 10 seconds.
 
-*Note: the Mission 1 drag-to-fly / wingman-command slice in the rest of this sheet is still the plan target; the First Sortie loop above is what the shipped build actually plays today — a 60-second mode, with the 5-minute sortie as the longer run.*
+*Note: wingmen and squad commands are now in the shipped build (every mode, not only Mission 1). The Mission 2-5 table and the between-mission upgrade list below are still plan targets; the shipped game keeps its twin-stick controls and in-run perks.*
 
-## Control scheme
+## Control scheme (as shipped)
 
-- **Drag-to-fly:** one thumb drags the ship anywhere on the playfield; the
-  ship follows the finger with a small offset so your thumb never covers it.
-- **Auto-fire:** always on — no fire button, no second thumb needed.
-- **Squad commands:** three large thumb-safe buttons on the command HUD —
-  Focus Fire, Spread, Regroup. One tap, wingmen obey immediately.
-- **Pause:** one button, top corner, outside the thumb-rest zones.
+- **Move:** left thumb, floating stick (WASD / left stick on a pad).
+- **Auto-fire, auto-aim:** guns always fire. With aim assist on **Auto** (the
+  phone default) they lock the nearest threat, bosses and elites first, so
+  the game plays with one thumb. Drag the right thumb (or the mouse) to aim
+  yourself; let go and auto aim takes over again.
+- **Squad commands:** three thumb-safe buttons above the move stick (1 / 2 / 3
+  on a keyboard, X / Y / B on a pad). One tap, both wingmen obey at once:
+  - **Focus:** both hit the toughest enemy near your crosshair (cyan bracket).
+  - **Spread:** they swing wide and each clears its own targets.
+  - **Regroup:** they tuck in, shoot down enemy bullets that reach them and
+    cut the damage you take by about a fifth (dashed cyan ring).
+- **Visible in the first 30 seconds:** "WINGMEN ONLINE" callout at the start
+  and the buttons pulse until the first order.
+- **Skill:** one button, ring fills as it charges. **Pause:** top corner.
 
 ## First 5 missions / enemies
 

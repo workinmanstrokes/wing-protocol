@@ -1,3 +1,5 @@
+import { orderForKey, orderForPadButton, type SquadOrder } from "./squad";
+
 export type Actions = {
   moveX: number;
   moveY: number;
@@ -5,6 +7,8 @@ export type Actions = {
   aimY: number;
   skill: boolean;
   pause: boolean;
+  /** Squad order issued this step (button tap, 1/2/3, or pad X/Y/B), else null. */
+  squad: SquadOrder | null;
   hasAim: boolean;
   /** true when aimX/aimY is a stick direction (else a pointer position in CSS px). */
   stickAim: boolean;
@@ -24,6 +28,9 @@ const GAME_KEYS = new Set([
   "ShiftRight",
   "KeyP",
   "Escape",
+  "Digit1",
+  "Digit2",
+  "Digit3",
 ]);
 
 /**
@@ -53,6 +60,9 @@ export class GameInput {
   private padRight = { x: 0, y: 0 };
   skillTap = false;
   pauseTap = false;
+  /** Set by the squad buttons / number keys; consumed by the next sample(). */
+  squadTap: SquadOrder | null = null;
+  private padSquadPrev: boolean[] = [];
   private prevSkill = false;
   private prevPause = false;
   private attached: HTMLElement | null = null;
@@ -63,6 +73,10 @@ export class GameInput {
     this.attached = el;
     const onDown = (e: KeyboardEvent) => {
       if (GAME_KEYS.has(e.code)) e.preventDefault();
+      if (!e.repeat) {
+        const order = orderForKey(e.code);
+        if (order) this.squadTap = order;
+      }
       this.keys.add(e.code);
     };
     const onUp = (e: KeyboardEvent) => {
@@ -152,6 +166,12 @@ export class GameInput {
         this.padRight.y += rs.y;
         if (p.buttons[0]?.pressed || p.buttons[7]?.pressed) this.skillTap = true;
         if (p.buttons[9]?.pressed) this.pauseTap = true;
+        for (const bi of [1, 2, 3]) {
+          const down = !!p.buttons[bi]?.pressed;
+          const order = orderForPadButton(bi);
+          if (down && !this.padSquadPrev[bi] && order) this.squadTap = order;
+          this.padSquadPrev[bi] = down;
+        }
       }
     }
 
@@ -169,6 +189,8 @@ export class GameInput {
     this.prevPause = pauseHeld || this.pauseTap;
     this.skillTap = false;
     this.pauseTap = false;
+    const squad = this.squadTap;
+    this.squadTap = null;
 
     const rsx = this.rightStick.x + this.padRight.x;
     const rsy = this.rightStick.y + this.padRight.y;
@@ -182,6 +204,7 @@ export class GameInput {
       stickAim: hasStickAim,
       skill,
       pause,
+      squad,
     };
   }
 }

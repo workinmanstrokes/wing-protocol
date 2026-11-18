@@ -50,7 +50,7 @@ await page.addInitScript(() => {
       stats: { crates: 0, upgrades: 0, bossKills: 0 },
     }),
   );
-  localStorage.setItem("wp-controls-briefed", "1");
+  localStorage.setItem("wp-controls-briefed-2", "1");
   localStorage.setItem("wing-protocol-quality", "high");
 });
 await page.goto(url, { waitUntil: "domcontentloaded" });

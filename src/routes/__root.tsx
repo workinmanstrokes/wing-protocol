@@ -50,7 +50,7 @@ export const Route = createRootRoute({
     ],
     // iOS/PWA helper (offline service worker, WebAudio unlock on first tap, no zoom/rubber-band). Production only.
     scripts: [
-      { src: "/telemetry.js", defer: true },
+      { src: `${BASE}telemetry.js`, defer: true },
       ...(import.meta.env.PROD && !PORTAL ? [{ src: `${BASE}ios.js` }] : []),
     ],
   }),
