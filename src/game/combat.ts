@@ -1,7 +1,7 @@
-import { MECH_MAP, PERKS, PERK_MAP, WORLD, xpForLevel, rollGear } from "./data";
+import { MECH_MAP, PERKS, WORLD, xpForLevel, rollGear } from "./data";
 import { GameAudio } from "./audio";
 import { GameInput } from "./input";
-import { angleDiff, applyAimAssist, getAimAssistPref, smoothAim } from "./aim";
+import { AUTO_TURN_RATE, angleDiff, applyAimAssist, getAimAssistPref, pickAutoTarget, smoothAim } from "./aim";
 import { drawEnemyTop, drawMechTop, drawObstacle, drawPickup } from "./sprites";
 import { MECH_BOOSTERS, enemyRim } from "./mecha";
 import {
@@ -30,6 +30,16 @@ import type { GearItem, HudState, MechId, PerkId, RunResult } from "./types";
 import type { SaveData } from "./types";
 import { SLOTS, applyGear } from "./meta/gear";
 import { BASE_CONFIG, type BossKind, type RunConfig } from "./meta/modes";
+import {
+  SQUAD,
+  SQUAD_ORDERS,
+  WINGMEN,
+  nearestTarget,
+  pickFocusTarget,
+  slotFor,
+  wingmanShotDamage,
+  type SquadOrder,
+} from "./squad";
 
 import {
   BloomLayer, FpsGovernor, PROFILES, cachedSprite, drawSprite, drawSpriteFast, floorTile, getQualityPref, glowSprite,
@@ -223,6 +233,19 @@ type Float = {
 };
 
 type Wreck = { x: number; y: number; r: number; seed: number; kind: ObstacleKind };
+type Wing = {
+  x: number;
+  y: number;
+  prevX: number;
+  prevY: number;
+  /** Facing (radians); eased toward the current shot or travel direction. */
+  ang: number;
+  prevAng: number;
+  fireCd: number;
+  target: Mob | null;
+  /** Muzzle flash timer. */
+  flash: number;
+};
 
 export type CombatHooks = {
   onHud: (h: HudState) => void;
@@ -337,6 +360,8 @@ export class Combat {
   private fireAim = 0;
   private aimManual = false;
   private aimHold = 0;
+  /** Auto aim lock (aim assist "auto"), or null while aiming manually / nothing in range. */
+  private autoTarget: Mob | null = null;
   private lastYaw = 0;
   private hp = 100;
   private maxHp = 100;
@@ -475,6 +500,15 @@ export class Combat {
   private capHits = 0;
   private aegisT = 0;
   private aegisAng = 0;
+  private squadOrder: SquadOrder = "focus";
+  /** Set once the player has issued an order this run (stops the HUD hint). */
+  private squadUsed = false;
+  private squadIntro = false;
+  private squadFlashT = 0;
+  private focusTarget: Mob | null = null;
+  private wings: Wing[] = [];
+  /** Interpolation factor of the frame being drawn (0..1 between sim steps). */
+  private renderT = 1;
   private zones: Zone[] = pool(24, () => ({
     alive: false, kind: "net", x: 0, y: 0, x2: 0, y2: 0, r: 40, t: 0, tick: 0, dmg: 0, color: "#fff", arm: 0,
   }));
@@ -527,6 +561,10 @@ export class Combat {
     this.viewCamY = this.prevCamY = this.camY;
     this.prevPx = this.px;
     this.prevPy = this.py;
+    for (let i = 0; i < WINGMEN; i++) {
+      const s0 = slotFor(this.squadOrder, i, WINGMEN, this.px, this.py, this.aim, 0);
+      this.wings.push({ x: s0.x, y: s0.y, prevX: s0.x, prevY: s0.y, ang: this.aim, prevAng: this.aim, fireCd: 0.4 + i * 0.13, target: null, flash: 0 });
+    }
     this.bindProbe();
     this.last = performance.now();
     this.raf = requestAnimationFrame(this.frame);
@@ -768,6 +806,8 @@ export class Combat {
         mobs: this.mobs.filter((m) => m.alive).length, bosses: this.bosses, evo: [...this.evo],
         uplinks: this.uplinksWon, over: this.over, quality: this.quality, fps: Math.round(this.gov.fps), leveling: this.leveling, paused: this.paused, hitstop: this.hitstop,
         skillCd: this.skillCd, skillMax: this.skillMax, mech: this.mechId, maxHp: this.maxHp,
+        squad: this.squadOrder, wings: this.wings.map((w) => ({ x: w.x, y: w.y })), focus: !!this.focusTarget?.alive,
+        autoLock: !!this.autoTarget?.alive,
         // player position in CSS px on the canvas (ignores screen shake); used by screenshot tooling
         screen: { x: this.canvas.clientWidth / 2 + this.px - this.viewCamX, y: this.canvas.clientHeight / 2 + this.py - this.viewCamY },
       }),
@@ -914,6 +954,13 @@ export class Combat {
     // toward an enemy already inside a tiny cone around the crosshair.
     let aimAng = this.aim;
     this.aimManual = false;
+    const assist = getAimAssistPref();
+    // Auto aim only steps in when the player is not aiming (touch: right thumb up).
+    // Pointer aim on desktop counts as aiming, so mouse players keep full control.
+    const autoOn = assist === "auto" && !act.hasAim;
+    this.autoTarget = autoOn
+      ? pickAutoTarget(this.px, this.py, this.mobs, Math.max(320, stats.range * 1.3), this.autoTarget)
+      : null;
     if (act.hasAim) {
       if (act.stickAim) {
         // thumb stick: filter tremor without adding lag to flicks
@@ -926,9 +973,16 @@ export class Combat {
         if (Math.hypot(ax, ay) > 4) aimAng = Math.atan2(ay, ax);
       }
       this.aimManual = true;
-      this.aimHold = 0.9;
+      this.aimHold = assist === "auto" ? 0.25 : 0.9;
     } else if (this.aimHold > 0) {
       this.aimHold -= dt;
+    } else if (this.autoTarget) {
+      // lead the target by the main gun's flight time so shots meet fast enemies
+      const tg = this.autoTarget;
+      const d = Math.hypot(tg.x - this.px, tg.y - this.py);
+      const fly = Math.min(0.5, d / 620);
+      const want = Math.atan2(tg.y + tg.vy * fly - this.py, tg.x + tg.vx * fly - this.px);
+      aimAng = this.aim + angleDiff(this.aim, want) * (1 - Math.exp(-AUTO_TURN_RATE * dt));
     } else if (inputMag > 0.05) {
       // ease toward heading so releasing the aim stick doesn't snap the guns
       const want = Math.atan2(act.moveY, act.moveX);
@@ -936,7 +990,7 @@ export class Combat {
     }
     this.aim = aimAng;
     const fireAng =
-      this.aimManual && getAimAssistPref() === "light" ? applyAimAssist(aimAng, this.px, this.py, this.mobs) : aimAng;
+      this.aimManual && (assist === "light" || assist === "auto") ? applyAimAssist(aimAng, this.px, this.py, this.mobs) : aimAng;
     this.fireAim = fireAng;
     const aimX = Math.cos(fireAng);
     const aimY = Math.sin(fireAng);
@@ -973,6 +1027,8 @@ export class Combat {
       this.fireCd = slip / (stats.fire * (this.overdriveT > 0 ? 1.4 : 1));
     }
     if (act.skill && this.skillCd <= 0) this.castSkill(aimX, aimY);
+    if (act.squad) this.setSquad(act.squad);
+    this.updateWingmen(dt, fireAng);
 
     if ((this.perks.repair ?? 0) > 0) {
       this.hp = Math.min(this.maxHp, this.hp + dt * 3.2 * (this.perks.repair ?? 0));
@@ -1064,6 +1120,106 @@ export class Combat {
     if (this.hp <= 0) this.finish(false);
     else if (this.cfg.endWhenBossesDown && this.bossQueue >= this.cfg.bosses.length && this.bossKills >= this.cfg.bosses.length) this.finish(true);
     else if (this.time >= this.cfg.duration) this.finish(!this.cfg.endWhenBossesDown);
+  }
+
+  /** Issue a squad order (HUD button, 1/2/3, pad X/Y/B). */
+  private setSquad(order: SquadOrder) {
+    this.squadUsed = true;
+    this.squadFlashT = 0.5;
+    if (order === this.squadOrder) return;
+    this.squadOrder = order;
+    this.focusTarget = null;
+    const def = SQUAD_ORDERS.find((o) => o.id === order)!;
+    this.spawnFloat(this.px, this.py - 34, def.name.toUpperCase(), "#7fe8ff");
+    for (const w of this.wings) this.spawnRing(w.x, w.y, 26, 0.3, "#7fe8ff", 2);
+    if (order === "regroup") this.spawnRing(this.px, this.py, 46, 0.35, "#7fe8ff", 3);
+    this.audio.ui("confirm");
+  }
+
+  /** Move the escort toward its formation slots, pick targets and fire. */
+  private updateWingmen(dt: number, fireAng: number) {
+    const stats = this.base!;
+    const order = this.squadOrder;
+    const tune = SQUAD[order];
+    this.squadFlashT = Math.max(0, this.squadFlashT - dt);
+    // make the differentiator visible in the first seconds of every run
+    if (!this.squadIntro && this.time > 1.2) {
+      this.squadIntro = true;
+      if (this.announceT <= 0) this.announce("WINGMEN ONLINE", 2);
+    }
+    if (order === "focus") {
+      this.focusTarget = pickFocusTarget(this.px, this.py, fireAng, this.mobs, this.focusTarget, tune.range);
+    } else {
+      this.focusTarget = null;
+    }
+    const playerDps = stats.dmg * stats.fire * weaponDamageMul(this.mechId);
+    const dmg = wingmanShotDamage(order, playerDps) * (this.overdriveT > 0 ? 1.25 : 1);
+    // follow rate: snappy enough to keep formation at full sprint, soft enough to read as flight
+    const follow = 1 - Math.exp(-(order === "regroup" ? 14 : 9) * dt);
+    for (let i = 0; i < this.wings.length; i++) {
+      const w = this.wings[i]!;
+      w.prevX = w.x;
+      w.prevY = w.y;
+      w.prevAng = w.ang;
+      const slot = slotFor(order, i, this.wings.length, this.px, this.py, this.aim, this.time);
+      w.x += (slot.x - w.x) * follow;
+      w.y += (slot.y - w.y) * follow;
+      // a big jump (respawn-like teleports) snaps instead of streaking across the map
+      if (Math.hypot(slot.x - w.x, slot.y - w.y) > 400) {
+        w.x = w.prevX = slot.x;
+        w.y = w.prevY = slot.y;
+      }
+      w.flash = Math.max(0, w.flash - dt);
+      w.fireCd -= dt;
+      let target: Mob | null = null;
+      if (order === "focus") target = this.focusTarget;
+      else if (order === "spread") target = nearestTarget(w.x, w.y, this.mobs, tune.range);
+      let shotAng = target ? Math.atan2(target.y - w.y, target.x - w.x) : fireAng;
+      // lead a moving target a little so shots land on fast enemies
+      if (target) {
+        const d = Math.hypot(target.x - w.x, target.y - w.y);
+        const tFly = d / SQUAD.shotSpeed;
+        shotAng = Math.atan2(target.y + target.vy * tFly - w.y, target.x + target.vx * tFly - w.x);
+      }
+      w.target = target;
+      w.ang += angleDiff(w.ang, shotAng) * (1 - Math.exp(-16 * dt));
+      // only fire when there is something to hit (Regroup covers the player's aim line)
+      const hasWork = !!target || (order === "regroup" && this.nearestMob() !== null);
+      if (w.fireCd <= 0 && hasWork) {
+        w.fireCd = tune.interval * (this.overdriveT > 0 ? 0.8 : 1);
+        const life = tune.range / SQUAD.shotSpeed;
+        const mx = w.x + Math.cos(shotAng) * 12;
+        const my = w.y + Math.sin(shotAng) * 12;
+        if (order === "spread") {
+          this.spawnFriendly(mx, my, shotAng - 0.05, SQUAD.shotSpeed, 3.5, dmg * 0.5, life, 0, 0, "#9ff0ff");
+          this.spawnFriendly(mx, my, shotAng + 0.05, SQUAD.shotSpeed, 3.5, dmg * 0.5, life, 0, 0, "#9ff0ff");
+        } else {
+          this.spawnFriendly(mx, my, shotAng, SQUAD.shotSpeed, order === "focus" ? 4.5 : 3.5, dmg, life, 0, 0, "#7fe8ff");
+        }
+        w.flash = 0.06;
+      } else if (w.fireCd < 0) {
+        w.fireCd = 0;
+      }
+    }
+    // Regroup: wingmen shoot down enemy fire that reaches them
+    if (order === "regroup") {
+      const r = SQUAD.interceptR;
+      for (const b of this.bullets) {
+        if (!b.alive || b.friendly) continue;
+        for (const w of this.wings) {
+          const dx = b.x - w.x;
+          const dy = b.y - w.y;
+          const rr = r + b.r;
+          if (dx * dx + dy * dy < rr * rr) {
+            b.alive = false;
+            b.ret = 0;
+            this.burst(b.x, b.y, 3, "#7fe8ff");
+            w.flash = 0.06;
+            break;
+          }
+        }
+      }
+    }
   }
 
   private resolvePlayerWrecks() {
@@ -2143,6 +2299,7 @@ export class Combat {
     const net = this.mechId === "storm" && this.zones.some((z) => z.alive && z.kind === "net");
     dmg *= incomingDamageMul(this.mechId, { bulwark, brace: this.braceT > 0, ward: this.wardT > 0, slip, net });
     dmg *= sectorIncomingMul(this.sector, this.time);
+    if (this.squadOrder === "regroup") dmg *= SQUAD.guardMul;
     if (slip && this.kiteBufferReady) {
       dmg = Math.max(0, dmg - ABILITY.kite.buffer);
       this.kiteBufferReady = false;
@@ -2362,12 +2519,15 @@ export class Combat {
       leveling: this.leveling,
       combo: this.comboCount,
       overdrive: this.overdriveT,
+      squad: this.squadOrder,
+      squadHint: !this.squadUsed && this.time < SQUAD.hintFor,
     });
   }
 
   /** Draw the blend between the last two sim steps (see Interp), then put sim state back. */
   private draw() {
     const t = Math.max(0, Math.min(1, this.acc / STEP));
+    this.renderT = t;
     const sPx = this.px, sPy = this.py, sCx = this.camX, sCy = this.camY, sAim = this.aim, sFire = this.fireAim;
     const lerp = (a: number, b: number) => a + (b - a) * t;
     const lerpAng = (a: number, b: number) => a + angleDiff(a, b) * t;
@@ -2553,9 +2713,10 @@ export class Combat {
         ctx.globalAlpha = 1;
       }
       const g = glowSprite(b.color, true);
-      const r = b.r * (b.friendly ? 2.4 : 3) * (this.crowd ? 0.82 : 1);
+      // enemy shots never shrink or lose their outline in a crowd: that is when they matter most
+      const r = b.r * (b.friendly ? 2.4 * (this.crowd ? 0.82 : 1) : 3);
       ctx.drawImage(g.c, b.x - r, b.y - r, r * 2, r * 2);
-      if (!b.friendly && !this.crowd) {
+      if (!b.friendly) {
         ctx.strokeStyle = "rgba(20,0,0,0.6)";
         ctx.lineWidth = 1.2;
         ctx.beginPath();
@@ -2707,10 +2868,33 @@ export class Combat {
     ctx.drawImage(mechSpr.c, -mechSpr.half, -mechSpr.half, mechSpr.half * 2, mechSpr.half * 2);
     ctx.restore();
     ctx.globalAlpha = 1;
+    // True hitbox: enemy shots only hurt inside this small ring (build sheet: visible hitbox).
+    ctx.strokeStyle = "rgba(127,232,255,0.55)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(this.px, this.py, 16, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "#e9fbff";
+    ctx.beginPath();
+    ctx.arc(this.px, this.py, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    // auto-aim lock: a thin ring in the frame's accent on the enemy the guns are tracking
+    const at = this.autoTarget;
+    if (at && at.alive && at !== this.focusTarget) {
+      ctx.strokeStyle = MECH_MAP[this.mechId].accent;
+      ctx.globalAlpha = 0.7;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(at.x, at.y, at.r + 7, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    this.drawSquad(ctx, mechSpr, bl);
     // Aim line + reticle drawn on the exact angle the guns fire at (assist included),
     // so what you see is where the shots go.
     {
-      const on = this.aimManual ? 1 : 0.45;
+      const locked = !!this.autoTarget && this.autoTarget.alive;
+      const on = this.aimManual ? 1 : locked ? 0.8 : 0.45;
       ctx.save();
       ctx.translate(this.px, this.py);
       ctx.rotate(this.fireAim);
@@ -2728,7 +2912,7 @@ export class Combat {
         ctx.stroke();
       }
       // chevron at the end of the line
-      ctx.globalAlpha = this.aimManual ? 0.9 : 0.4;
+      ctx.globalAlpha = this.aimManual ? 0.9 : locked ? 0.75 : 0.4;
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.moveTo(150, -7);
@@ -2838,6 +3022,87 @@ export class Combat {
     if (this.paused && !this.leveling && !this.over) {
       ctx.fillStyle = "rgba(9,9,11,0.45)";
       ctx.fillRect(0, 0, w, h);
+    }
+  }
+
+  /** Wingmen, the Focus target bracket and the Regroup guard bubble. */
+  private drawSquad(ctx: CanvasRenderingContext2D, mechSpr: { c: HTMLCanvasElement | OffscreenCanvas; half: number }, bl: BloomLayer | null) {
+    const t = this.renderT;
+    const cyan = "#7fe8ff";
+    const pulse = 0.5 + 0.5 * Math.sin(this.time * 6);
+    if (this.squadOrder === "regroup") {
+      ctx.save();
+      ctx.strokeStyle = cyan;
+      ctx.globalAlpha = 0.28 + 0.18 * pulse;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([10, 7]);
+      ctx.lineDashOffset = -this.time * 30;
+      ctx.beginPath();
+      ctx.arc(this.px, this.py, 44, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    const ft = this.focusTarget;
+    if (ft && ft.alive) {
+      const r = ft.r + 12 + 3 * pulse;
+      ctx.save();
+      ctx.translate(ft.x, ft.y);
+      ctx.rotate(this.time * 1.6);
+      ctx.strokeStyle = cyan;
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = "round";
+      for (let k = 0; k < 4; k++) {
+        ctx.rotate(Math.PI / 2);
+        ctx.beginPath();
+        ctx.moveTo(r, -r * 0.45);
+        ctx.lineTo(r, -r);
+        ctx.lineTo(r * 0.55, -r);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    const size = mechSpr.half * 2 * 0.5;
+    const glow = glowSprite(cyan, true);
+    for (const w of this.wings) {
+      const wx = w.prevX + (w.x - w.prevX) * t;
+      const wy = w.prevY + (w.y - w.prevY) * t;
+      const wa = w.prevAng + angleDiff(w.prevAng, w.ang) * t;
+      ctx.globalAlpha = 0.5;
+      ctx.drawImage(glow.c, wx - 22, wy - 22, 44, 44);
+      ctx.globalAlpha = 1;
+      ctx.save();
+      ctx.translate(wx, wy);
+      ctx.rotate(wa);
+      ctx.drawImage(mechSpr.c, -size / 2, -size / 2, size, size);
+      ctx.restore();
+      // cyan IFF ring: friend at a glance, even over busy fights
+      ctx.strokeStyle = cyan;
+      ctx.globalAlpha = 0.75;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(wx, wy, size * 0.42, 0, Math.PI * 2);
+      ctx.stroke();
+      if (w.flash > 0) {
+        ctx.globalAlpha = 0.9;
+        const mx = wx + Math.cos(wa) * 13;
+        const my = wy + Math.sin(wa) * 13;
+        ctx.drawImage(glow.c, mx - 7, my - 7, 14, 14);
+      }
+      ctx.globalAlpha = 1;
+      if (bl && !this.crowd) bl.light(wx, wy, 30, cyan, 0.3);
+    }
+    if (this.squadFlashT > 0) {
+      ctx.globalAlpha = this.squadFlashT * 1.4;
+      ctx.strokeStyle = cyan;
+      ctx.lineWidth = 2;
+      for (const w of this.wings) {
+        ctx.beginPath();
+        ctx.moveTo(this.px, this.py);
+        ctx.lineTo(w.x, w.y);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
     }
   }
 

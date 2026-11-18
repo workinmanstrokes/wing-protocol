@@ -10,6 +10,7 @@ import { StoreTab } from "./store-tab";
 import { PilotsTab } from "./pilots-tab";
 import { AimAssistToggle, AudioSettings, GraphicsToggle } from "./settings";
 import { Modal, useSave } from "./shared";
+import { BuildStamp } from "@/components/build-stamp";
 
 export type MenuTab = "play" | "hangar" | "store" | "pilots";
 
@@ -98,6 +99,7 @@ export function MainMenu({
           );
         })}
       </nav>
+      <BuildStamp className="relative z-10 px-3 py-1.5 text-center text-[11px] text-muted" />
 
       {settings && (
         <Modal label="Settings" onClose={() => setSettings(false)}>

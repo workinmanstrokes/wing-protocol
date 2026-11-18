@@ -148,6 +148,12 @@ function authPopupPlugin(): Plugin {
 const CAPACITOR = process.env.BUILD_TARGET === "capacitor";
 
 export default defineConfig(({ command, isPreview }) => ({
+  define: {
+    // Baked into the bundle at build time so the game can stamp itself on screen
+    // (title, pause, results). CI sets GITHUB_SHA automatically; local builds read "dev".
+    __WP_BUILD_SHA__: JSON.stringify((process.env.GITHUB_SHA ?? "dev").slice(0, 7)),
+    __WP_BUILD_TIME__: JSON.stringify(new Date().toISOString().slice(0, 10)),
+  },
   server: {
     host: "0.0.0.0",
     port: 8080,

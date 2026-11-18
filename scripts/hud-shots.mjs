@@ -63,7 +63,7 @@ for (const view of [
   page.on("pageerror", (e) => errors.push(String(e)));
   await page.addInitScript((seed) => {
     localStorage.setItem("wing-protocol-save-v1", JSON.stringify(seed));
-    localStorage.setItem("wp-controls-briefed", "1");
+    localStorage.setItem("wp-controls-briefed-2", "1");
   }, saveFor());
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.locator('[data-testid="main-menu"][data-ready="1"]').waitFor({ timeout: 20000 });

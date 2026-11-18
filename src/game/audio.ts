@@ -94,6 +94,7 @@ export class GameAudio {
 
   private buffers = new Map<string, AudioBuffer>();
   private loading = new Map<string, Promise<AudioBuffer | null>>();
+  private failed = new Map<string, string>(); // path -> reason of the last failed load; cleared on success
   private ext: "ogg" | "mp3" = "ogg";
   private base = "/";
 
@@ -121,7 +122,34 @@ export class GameAudio {
 
   /** Debug/test snapshot. */
   debugState() {
-    return { state: this.ctx?.state ?? "none", ext: this.ext, buffers: this.buffers.size, voices: this.voices.length, music: Object.keys(this.music), scene: this.scene };
+    return { state: this.ctx?.state ?? "none", ext: this.ext, buffers: this.buffers.size, voices: this.voices.length, music: Object.keys(this.music), scene: this.scene, failed: [...this.failed.keys()], total: this.expectedTotal() };
+  }
+
+  /** Sounds the engine expects: every SFX variant + every music loop + the thruster loop. */
+  private expectedTotal() {
+    let n = 1; // thruster loop
+    for (const v of Object.values(SFX)) n += v;
+    return n + Object.keys(MUSIC).length;
+  }
+
+  /** Load status for Settings, so a fresh phone/browser load can verify sound: how many sounds
+   *  loaded, and which paths failed. */
+  audioStatus() {
+    return { loaded: this.buffers.size, total: this.expectedTotal(), failed: [...this.failed.keys()] };
+  }
+
+  private lastRetry = 0;
+
+  /** Re-fetch every sound that failed to load (e.g. after a flaky first load on a fresh
+   *  phone/browser load). Throttled: at most once per 5 seconds. */
+  retryFailed() {
+    if (!this.ctx) return;
+    const now = Date.now();
+    if (now - this.lastRetry < 5000) return;
+    this.lastRetry = now;
+    const paths = [...this.failed.keys()];
+    if (paths.length === 0) return;
+    void Promise.all(paths.map((p) => this.load(p))).then(() => this.syncMusic());
   }
 
   private ensurePrefs() {
@@ -191,6 +219,9 @@ export class GameAudio {
       this.bindLifecycle();
     }
     if (this.ctx.state === "suspended" && !document.hidden) void this.ctx.resume().catch(() => {});
+    // A first load that failed (e.g. the audio folder not served on that host) no longer means
+    // silence for the whole session: retry on the next gesture, throttled inside retryFailed().
+    this.retryFailed();
   }
 
   /** Install one-time global gesture listeners so the very first tap anywhere unlocks audio. */
@@ -214,14 +245,54 @@ export class GameAudio {
     return `${this.base}audio/${path}.${this.ext}`;
   }
 
+  /**
+   * Candidate URLs for one audio file, best first. The first is the Vite
+   * base (right in dev, Capacitor and normal deploys). The second resolves
+   * against the page that actually served the app: the live test site serves
+   * the build under a snapshot sub-path, where an absolute "/audio/..." 
+   * misses the snapshot route and 404s while the page-relative "audio/..." 
+   * loads. `load()` tries each in turn; the first that answers wins.
+   */
+  private urls(path: string): string[] {
+    const primary = this.url(path);
+    if (typeof document === "undefined") return [primary];
+    try {
+      const rel = `audio/${path}.${this.ext}`;
+      const doc = new URL(rel, document.baseURI).href;
+      return doc === primary ? [primary] : [primary, doc];
+    } catch {
+      return [primary];
+    }
+  }
+
   private load(path: string): Promise<AudioBuffer | null> {
     const hit = this.loading.get(path);
     if (hit) return hit;
     const p = (async () => {
       if (!this.ctx) return null;
       try {
-        const res = await fetch(this.url(path));
-        if (!res.ok) return null;
+        // Try each candidate URL in turn; the first that answers wins. A failure on
+        // every candidate is recorded (surfaced in Settings) and the cached promise
+        // is dropped so a later retry can succeed instead of replaying it forever.
+        let res: Response | null = null;
+        let lastStatus = 0;
+        for (const u of this.urls(path)) {
+          try {
+            const r = await fetch(u);
+            if (r.ok) {
+              res = r;
+              break;
+            }
+            lastStatus = r.status;
+          } catch {
+            // try the next candidate URL
+          }
+        }
+        if (!res) {
+          this.failed.set(path, lastStatus ? `HTTP ${lastStatus}` : "all audio URLs failed");
+          this.loading.delete(path);
+          return null;
+        }
         const data = await res.arrayBuffer();
         const buf = await new Promise<AudioBuffer>((resolve, reject) => {
           // callback form for older Safari
@@ -229,8 +300,11 @@ export class GameAudio {
           if (r && typeof (r as Promise<AudioBuffer>).then === "function") (r as Promise<AudioBuffer>).then(resolve, reject);
         });
         this.buffers.set(path, buf);
+        this.failed.delete(path);
         return buf;
-      } catch {
+      } catch (err) {
+        this.failed.set(path, err instanceof Error ? err.message : "load failed");
+        this.loading.delete(path);
         return null;
       }
     })();

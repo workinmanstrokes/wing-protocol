@@ -65,7 +65,7 @@ async function boot(page, selected, opts = {}) {
     : saveFor(selected);
   await page.addInitScript(({ seed, briefed }) => {
     localStorage.setItem("wing-protocol-save-v1", JSON.stringify(seed));
-    if (briefed) localStorage.setItem("wp-controls-briefed", "1");
+    if (briefed) localStorage.setItem("wp-controls-briefed-2", "1");
   }, { seed, briefed: opts.briefed !== false });
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));

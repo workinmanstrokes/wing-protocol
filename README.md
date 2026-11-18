@@ -1,7 +1,7 @@
 # Wing Protocol
 
-Mech action game: survive timed sorties against endless machine hordes, unlock new mech frames, open
-crates and extract legendary gear. Modes include Sortie, Tower, Elite and Rush, with frames such as
+Mech action game: survive timed sorties against endless machine hordes with two wingmen you command
+(Focus, Spread, Regroup), unlock new mech frames, open crates and extract legendary gear. Modes include Sortie, Tower, Elite and Rush, with frames such as
 Aether Wing, Heavy Forge and Night Scythe.
 
 - Android app ID: `com.diddlerrr.wingprotocol`
@@ -35,9 +35,10 @@ npm run portal:build     # portal zips in /workspace/out
 
 - `.github/workflows/android.yml`: Android build on PRs touching app code and on manual runs
 - `.github/workflows/release-aab.yml`: manual signed release `.aab` for Google Play
+- `.github/workflows/pages.yml`: manual deploy of the installable PWA to GitHub Pages
 
 ## Docs
 
-- `ANDROID-APP.md`: installing as a PWA or building an APK
+- `ANDROID-APP.md`: installing on Android (PWA from GitHub Pages, or the CI-built APK)
 - `AGENTS.md`: workspace rules for coding agents
 - `docs/qa/`, `docs/visual-qa/`: QA notes and screenshots

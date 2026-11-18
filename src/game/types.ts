@@ -1,3 +1,5 @@
+import type { SquadOrder } from "./squad";
+
 export type MechId =
   | "aether"
   | "forge"
@@ -200,4 +202,8 @@ export interface HudState {
   leveling: boolean;
   combo: number;
   overdrive: number;
+  /** Current squad order (wingmen). */
+  squad: SquadOrder;
+  /** True early in a run until the player issues their first order: the HUD pulses the buttons. */
+  squadHint: boolean;
 }

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Pause, Play, PlayCircle, Volume2, VolumeX } from "lucide-react";
+import { Crosshair, Expand, Pause, Play, PlayCircle, Shield, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Combat } from "@/game/combat";
 import { MECH_MAP, PERK_MAP } from "@/game/data";
 import { gameAudio } from "@/game/audio";
 import { GameInput } from "@/game/input";
+import { SQUAD_ORDERS, type SquadOrder } from "@/game/squad";
 import {
   doubleExtractLoot,
   extractAdsLeftToday,
@@ -16,7 +17,7 @@ import {
   settleTowerFloor,
   type RunPayout,
 } from "@/game/save";
-import { bossRushConfig, eliteConfig, sortieConfig, type RunConfig } from "@/game/meta/modes";
+import { bossRushConfig, eliteConfig, firstSortieConfig, sortieConfig, type RunConfig } from "@/game/meta/modes";
 import { canDoubleExtract } from "@/game/meta/extract";
 import { rewardedAdAvailable, showRewardedAd } from "@/game/meta/ads";
 import { portalCommercialBreak, portalGameplay, portalLoadingFinished } from "@/game/portal";
@@ -35,6 +36,7 @@ import { MenuBackground } from "@/components/menu/menu-bg";
 import type { StartSpec } from "@/components/menu/play-tab";
 import { AimAssistToggle, AudioSettings, GraphicsToggle } from "@/components/menu/settings";
 import { Eyebrow, MechPortrait, RewardLine, rarityClass, useSave } from "@/components/menu/shared";
+import { BuildStamp } from "@/components/build-stamp";
 
 type Screen = "menu" | "combat" | "results" | "tower";
 
@@ -62,6 +64,7 @@ interface Outcome {
 }
 
 function configFor(spec: StartSpec): RunConfig {
+  if (spec.kind === "first") return firstSortieConfig();
   if (spec.kind === "elite") return eliteConfig(spec.boss, spec.mods);
   if (spec.kind === "rush") return bossRushConfig();
   if (spec.kind === "tower") return towerFloorConfig(1, "fight", [], 1);
@@ -278,6 +281,7 @@ export function GameApp() {
             onPause={() => combatRef.current?.pause(!(hud?.paused ?? false))}
           />
           <TouchPad input={inputRef.current} hud={hud} mechId={save.selected} />
+          <SquadBar input={inputRef.current} hud={hud} />
           <ControlsBrief />
           {choices && (
             <LevelUp
@@ -633,11 +637,68 @@ function TouchPad({ input, hud, mechId }: { input: GameInput; hud: HudState | nu
   );
 }
 
+const SQUAD_ICONS: Record<SquadOrder, typeof Crosshair> = { focus: Crosshair, spread: Expand, regroup: Shield };
+
+/**
+ * Wingman command buttons (Focus / Spread / Regroup). Phones: a thumb-safe
+ * column above the move stick (a row above the resting stick in landscape).
+ * Desktop: a row bottom-left with the 1 / 2 / 3 keys shown.
+ */
+function SquadBar({ input, hud }: { input: GameInput; hud: HudState | null }) {
+  const active = hud?.squad ?? "focus";
+  const hint = !!hud?.squadHint;
+  return (
+    <div
+      data-testid="squad-bar"
+      role="group"
+      aria-label="Wingman orders"
+      className={cn(
+        "pointer-events-auto absolute bottom-6 left-4 z-10 flex flex-row gap-2",
+        "pointer-coarse:bottom-[calc(46%+0.75rem)] pointer-coarse:left-[max(0.75rem,env(safe-area-inset-left))] pointer-coarse:flex-col",
+        "pointer-coarse:landscape:bottom-[10rem] pointer-coarse:landscape:flex-row",
+      )}
+    >
+      {SQUAD_ORDERS.map((o) => {
+        const Icon = SQUAD_ICONS[o.id];
+        const on = active === o.id;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            data-squad={o.id}
+            aria-pressed={on}
+            aria-label={`${o.name}: ${o.desc}`}
+            title={`${o.name} (${o.key}) \u2014 ${o.desc}`}
+            className={cn(
+              "relative grid h-11 w-[3.25rem] place-items-center rounded-lg border bg-surface/85 font-display text-[9px] font-semibold uppercase leading-none tracking-wider backdrop-blur-sm transition-colors pointer-fine:w-auto pointer-fine:grid-flow-col pointer-fine:gap-1.5 pointer-fine:px-3",
+              on
+                ? "border-squad bg-squad/15 text-squad shadow-[0_0_14px_rgba(127,232,255,0.35)]"
+                : "border-border text-muted hover:border-squad/60",
+              hint && !on && "animate-pulse border-squad/50",
+            )}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              input.squadTap = o.id;
+            }}
+          >
+            <Icon className="size-4" aria-hidden />
+            <span>{o.name}</span>
+            <kbd className="absolute -right-1 -top-1 hidden rounded bg-elevated px-1 font-mono text-[9px] text-subtle pointer-fine:block">
+              {o.key}
+            </kbd>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function ControlsBrief() {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     try {
-      setOpen(localStorage.getItem("wp-controls-briefed") !== "1");
+      setOpen(localStorage.getItem("wp-controls-briefed-2") !== "1");
     } catch {
       setOpen(true);
     }
@@ -645,7 +706,7 @@ function ControlsBrief() {
   if (!open) return null;
   const dismiss = () => {
     try {
-      localStorage.setItem("wp-controls-briefed", "1");
+      localStorage.setItem("wp-controls-briefed-2", "1");
     } catch {
       /* private mode */
     }
@@ -658,7 +719,7 @@ function ControlsBrief() {
     >
       <p className="font-display text-sm font-semibold">How to move</p>
       <p className="mt-1 text-sm leading-relaxed text-muted">
-        Left thumb moves. Right thumb aims and fires. Tap Skill above the aim stick when the ring is full. On a keyboard: WASD, mouse, Space.
+        Left thumb moves. Your guns fire on their own and lock onto the nearest threat; drag the right thumb to aim yourself. Tap Skill when its ring is full. Your two wingmen follow the Focus, Spread and Regroup buttons. Keyboard: WASD, mouse, Space, 1 2 3.
       </p>
       <button type="button" onClick={dismiss} className="mt-2 min-h-11 w-full rounded-lg bg-accent font-bold text-accent-fg">
         Got it
@@ -722,6 +783,7 @@ function PauseMenu({
             Abort run
           </Button>
         </div>
+        <BuildStamp className="mt-4 text-center text-[11px] text-muted" />
       </div>
     </div>
   );
@@ -854,6 +916,7 @@ function Results({
           Main menu
         </Button>
       </div>
+      <BuildStamp className="shrink-0 border-t border-border bg-surface px-4 py-1.5 text-center text-[11px] text-muted" />
     </div>
   );
 }
