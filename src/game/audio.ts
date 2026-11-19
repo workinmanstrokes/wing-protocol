@@ -222,6 +222,11 @@ export class GameAudio {
     // A first load that failed (e.g. the audio folder not served on that host) no longer means
     // silence for the whole session: retry on the next gesture, throttled inside retryFailed().
     this.retryFailed();
+    // The menu scene is set before the first gesture, while there is no AudioContext yet,
+    // so syncMusic() then returns early and the menu loop never starts: start the current
+    // scene's music now that audio is unlocked (no-op when it is already playing).
+    // Without this, a tester sitting on the menu hears nothing at all.
+    this.syncMusic();
   }
 
   /** Install one-time global gesture listeners so the very first tap anywhere unlocks audio. */

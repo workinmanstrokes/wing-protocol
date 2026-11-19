@@ -8,6 +8,12 @@ The game builds as a static, offline-capable web app (manifest, maskable icon,
 service worker), so GitHub Pages can host it at
 `https://workinmanstrokes.github.io/wing-protocol/`.
 
+**Status 2026-11-19 (checked live): this URL returns GitHub's 404 page —
+Pages is not serving this repo yet.** Before sharing the link with a tester,
+finish the one-time setup below and run the deploy workflow, then open the
+URL and confirm the game (not a 404) loads. Until then testers get no game
+at all, which is what the VEX 2.5/10 retest ran into.
+
 One-time setup (on github.com):
 
 1. Repo **Settings → Pages → Build and deployment → Source**: pick **GitHub Actions**.

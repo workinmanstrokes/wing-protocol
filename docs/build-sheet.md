@@ -1,7 +1,7 @@
 # Wing Protocol — Build Sheet (one page)
 
 **Game:** Wing Protocol — mobile arcade shooter, Android.
-**Tester score this sheet answers:** 3.5/10 (grade D); retested by VEX at 2.5/10 (grade F) — the live build had no describable loop. **Status:** wingmen and squad commands shipped; two-phone test still to do; the loop below now describes the shipped build as tested, and the same words appear on the title screen.
+**Tester score this sheet answers:** 3.5/10 (grade D); retested by VEX at 2.5/10 (grade F) — the live build had no describable loop. **Status:** wingmen and squad commands shipped; two-phone test still to do; the loop below now describes the shipped build as tested, and the same words appear on the title screen. **Retest note 2026-11-19:** the GitHub Pages test site returned GitHub's 404 page when checked live, so the retest could not have seen the current build at that URL — deploy the PWA before the next test round (gate in `docs/playtests/blind-playtest-log.md`).
 
 ## 60-second core loop
 
@@ -56,6 +56,15 @@ a glance. Enemy bullets are large, bright magenta with a white core on the
 dark background. Damage feedback: white flash + short screen shake + hit
 spark. The player hitbox is a small visible cyan ring, smaller than the
 ship sprite.
+
+## Name collision / store identity — decision pending
+
+Search for "Wing Protocol" is dominated by Wing API, WingMan Protocol,
+Wings.io, Wing Commander, and Wingpath; no coverage of this Wing Protocol
+was found (VEX retest, 2.5/10). The name is therefore not yet store-safe:
+before ASO work, decide rename vs. keeping the name with a disambiguating
+subtitle and ASO keywords (e.g. "mech sortie shooter, command your
+wingmen"). No rename is made in this update — that is the maker's call.
 
 ## Monetization — decision pending (to be locked in writing before launch)
 
