@@ -5,9 +5,11 @@
    ios.js shows an "update ready" prompt instead of silently serving stale files.
    Same-origin requests: network first (updates arrive right away), cached copy when offline. */
 const CACHE = 'wingprotocol-runtime-v2';
+// Every game on the arcade site shares one cache storage, so only clear this game's own old caches.
+const OWN = 'wingprotocol-';
 const FILES = ["./", "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png", "ios.js"];
 self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => Promise.all(FILES.map((f) => c.add(new Request(f, { cache: 'reload' })).catch(() => {})))).then(() => self.skipWaiting())));
-self.addEventListener('activate', (e) => e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())));
+self.addEventListener('activate', (e) => e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k.startsWith(OWN) && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener('message', (e) => { if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting(); });
 self.addEventListener('fetch', (e) => {
   const req = e.request;

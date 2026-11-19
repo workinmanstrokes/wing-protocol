@@ -2,9 +2,11 @@
    Cache name carries a content hash, so every build gets a fresh cache and old ones are removed.
    Same-origin requests: network first (updates arrive right away), cached copy when offline. */
 const CACHE = '__CACHE__';
+// Every game on the arcade site shares one cache storage, so only clear this game's own old caches.
+const OWN = CACHE.slice(0, CACHE.lastIndexOf('-') + 1);
 const FILES = __FILES__;
 self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => Promise.all(FILES.map((f) => c.add(new Request(f, { cache: 'reload' })).catch(() => {})))).then(() => self.skipWaiting())));
-self.addEventListener('activate', (e) => e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())));
+self.addEventListener('activate', (e) => e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k.startsWith(OWN) && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener('message', (e) => { if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting(); });
 self.addEventListener('fetch', (e) => {
   const req = e.request;
