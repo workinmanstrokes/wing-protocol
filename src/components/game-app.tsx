@@ -127,6 +127,13 @@ export function GameApp() {
     void portalGameplay(live);
   }, [live]);
 
+  // PWA update gate (public/ios.js): a new build waits while a run, tower climb or its results are up,
+  // and only applies once the player is back on the menu, so an update never ends a mission.
+  useEffect(() => {
+    document.documentElement.dataset.wpBusy = screen === "menu" ? "0" : "1";
+    window.dispatchEvent(new Event("wp-play-state"));
+  }, [screen]);
+
   const bankTower = (t: TowerRun) => {
     const p = settleTower(t.cleared);
     setOutcome({
