@@ -1,7 +1,8 @@
 import { MECH_MAP, PERKS, WORLD, xpForLevel, rollGear } from "./data";
 import { GameAudio } from "./audio";
 import { GameInput } from "./input";
-import { AUTO_TURN_RATE, angleDiff, applyAimAssist, getAimAssistPref, pickAutoTarget, smoothAim } from "./aim";
+import { AUTO_TURN_RATE, THUMB_ASSIST, angleDiff, applyAimAssist, getAimAssistPref, pickAutoTarget, smoothAim } from "./aim";
+import { leadTime, muzzleSpeed, segmentHitsCircle } from "./shots";
 import { drawEnemyTop, drawMechTop, drawObstacle, drawPickup } from "./sprites";
 import { MECH_BOOSTERS, enemyRim } from "./mecha";
 import {
@@ -104,6 +105,14 @@ type Bullet = {
   chain: number;
   /** Tether blades: seconds of life left at which the shot turns back to the mech. */
   ret: number;
+  /**
+   * Set for one step when the player's main gun fires: the first hit test sweeps
+   * from the gun (ox, oy) instead of the muzzle, so an enemy hugging the mech is
+   * not skipped by rounds that spawn past it. Cleared on the round's first update.
+   */
+  launch: boolean;
+  ox: number;
+  oy: number;
 };
 
 type Mob = {
@@ -416,6 +425,7 @@ export class Combat {
   private bullets = pool(MAX_BULLET, () => ({
     alive: false, x: 0, y: 0, vx: 0, vy: 0, r: 4, dmg: 1, life: 1, pierce: 0,
     friendly: true, homing: 0, explode: 0, color: "#9fd", crit: false, chain: 0, ret: 0,
+    launch: false, ox: 0, oy: 0,
   }));
   private mobs = pool(MAX_ENEMY, () => ({
     alive: false, kind: "drone", x: 0, y: 0, vx: 0, vy: 0, r: 14, hp: 1, maxHp: 1,
@@ -980,7 +990,7 @@ export class Combat {
       // lead the target by the main gun's flight time so shots meet fast enemies
       const tg = this.autoTarget;
       const d = Math.hypot(tg.x - this.px, tg.y - this.py);
-      const fly = Math.min(0.5, d / 620);
+      const fly = leadTime(d, muzzleSpeed(MECH_MAP[this.mechId].weapon));
       const want = Math.atan2(tg.y + tg.vy * fly - this.py, tg.x + tg.vx * fly - this.px);
       aimAng = this.aim + angleDiff(this.aim, want) * (1 - Math.exp(-AUTO_TURN_RATE * dt));
     } else if (inputMag > 0.05) {
@@ -989,8 +999,14 @@ export class Combat {
       aimAng = this.aim + angleDiff(this.aim, want) * (1 - Math.exp(-10 * dt));
     }
     this.aim = aimAng;
-    const fireAng =
-      this.aimManual && (assist === "light" || assist === "auto") ? applyAimAssist(aimAng, this.px, this.py, this.mobs) : aimAng;
+    // "auto" + aim stick: thumb-sized assist cone; "light" (or mouse/tap aim): the tiny one
+    const fireAng = !this.aimManual
+      ? aimAng
+      : assist === "auto" && act.stickAim
+        ? applyAimAssist(aimAng, this.px, this.py, this.mobs, THUMB_ASSIST)
+        : assist === "light" || assist === "auto"
+          ? applyAimAssist(aimAng, this.px, this.py, this.mobs)
+          : aimAng;
     this.fireAim = fireAng;
     const aimX = Math.cos(fireAng);
     const aimY = Math.sin(fireAng);
@@ -1294,6 +1310,9 @@ export class Combat {
       b.alive = true;
       b.x = this.px + Math.cos(ang) * 22 - Math.sin(ang) * lat;
       b.y = this.py + Math.sin(ang) * 22 + Math.cos(ang) * lat;
+      b.launch = true;
+      b.ox = this.px + Math.cos(ang) * 8 - Math.sin(ang) * lat;
+      b.oy = this.py + Math.sin(ang) * 8 + Math.cos(ang) * lat;
       b.vx = Math.cos(ang) * speed;
       b.vy = Math.sin(ang) * speed;
       const isCrit = Math.random() < stats.crit;
@@ -2002,6 +2021,10 @@ export class Combat {
         b.vy = (dy / d) * sp;
         if (d < 24) b.life = 0;
       }
+      // swept hit test runs over the whole path travelled this step (see shots.ts)
+      const x0 = b.launch ? b.ox : b.x;
+      const y0 = b.launch ? b.oy : b.y;
+      b.launch = false;
       b.x += b.vx * dt;
       b.y += b.vy * dt;
       b.life -= dt;
@@ -2025,9 +2048,7 @@ export class Combat {
             if (!list) continue;
             for (const m of list) {
           if (!m.alive) continue;
-          const dx = m.x - b.x;
-          const dy = m.y - b.y;
-          if (dx * dx + dy * dy < (m.r + b.r) * (m.r + b.r)) {
+          if (segmentHitsCircle(x0, y0, b.x, b.y, m.x, m.y, m.r + b.r)) {
             this.hurtMob(m, b.dmg, b.explode, b.crit);
             if (b.explode > 0) this.maybeCrater(b.x, b.y, b.explode, b.dmg);
             if (b.chain > 0) {

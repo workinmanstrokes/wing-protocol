@@ -3,6 +3,8 @@
  * - "auto" (phone default): when you are not aiming yourself, the guns lock
  *   onto the nearest threat (bosses and elites first) so one thumb can play.
  *   Drag the aim stick and you take over; let go and auto picks up again.
+ *   While you steer with the stick, a thumb-sized assist cone (THUMB_ASSIST)
+ *   settles the guns onto the enemy you are already pointing at.
  * - "light": you aim; shots get a small nudge toward an enemy already inside
  *   a narrow cone around the crosshair. Never picks targets on its own.
  * - "off": pure manual aim.
@@ -24,11 +26,29 @@ export const ASSIST_RANGE = 520;
  */
 export const ASSIST_PULL = 0.6;
 
-/** Fraction of `diff` that light assist closes (fades linearly to 0 at the cone edge). */
-export function assistPull(diff: number): number {
+/**
+ * Thumb assist: used when aim assist is "auto" (the phone default) and you are
+ * steering the guns yourself with the aim stick. A thumb on a small stick is
+ * only accurate to roughly ten degrees, so the guns settle onto an enemy that
+ * sits inside a wider cone. Full pull in the inner half of the cone, fading to
+ * zero at the edge, so it never snaps as an enemy drifts in or out, and it
+ * never picks a target you are not already pointing at.
+ */
+export type AssistShape = { cone: number; pull: number; inner: number };
+export const LIGHT_ASSIST: AssistShape = { cone: ASSIST_CONE, pull: ASSIST_PULL, inner: 0 };
+export const THUMB_ASSIST: AssistShape = { cone: (14 * Math.PI) / 180, pull: 0.85, inner: 0.5 };
+
+/**
+ * Fraction of `diff` that assist closes. Light: fades linearly from the centre
+ * to 0 at the cone edge. Thumb: full `pull` inside `inner` of the cone, then
+ * fades linearly to 0 at the edge.
+ */
+export function assistPull(diff: number, shape: AssistShape = LIGHT_ASSIST): number {
   const a = Math.abs(diff);
-  if (a >= ASSIST_CONE) return 0;
-  return ASSIST_PULL * (1 - a / ASSIST_CONE);
+  if (a >= shape.cone) return 0;
+  const start = shape.cone * shape.inner;
+  if (a <= start) return shape.pull;
+  return shape.pull * (1 - (a - start) / (shape.cone - start));
 }
 
 /**
@@ -87,7 +107,13 @@ type Target = { x: number; y: number; alive: boolean };
  * Returns `aim` nudged toward the enemy closest to the aim line, if one sits
  * within ASSIST_CONE and ASSIST_RANGE; otherwise `aim` unchanged.
  */
-export function applyAimAssist(aim: number, px: number, py: number, targets: Iterable<Target>): number {
+export function applyAimAssist(
+  aim: number,
+  px: number,
+  py: number,
+  targets: Iterable<Target>,
+  shape: AssistShape = LIGHT_ASSIST,
+): number {
   let best = 0;
   let bestScore = Infinity;
   let found = false;
@@ -99,7 +125,7 @@ export function applyAimAssist(aim: number, px: number, py: number, targets: Ite
     const d2 = dx * dx + dy * dy;
     if (d2 > r2 || d2 < 1) continue;
     const diff = angleDiff(aim, Math.atan2(dy, dx));
-    if (Math.abs(diff) > ASSIST_CONE) continue;
+    if (Math.abs(diff) > shape.cone) continue;
     // prefer what is closest to the crosshair line, then nearer
     const score = Math.abs(diff) + Math.sqrt(d2) / ASSIST_RANGE * 0.05;
     if (score < bestScore) {
@@ -108,7 +134,7 @@ export function applyAimAssist(aim: number, px: number, py: number, targets: Ite
       found = true;
     }
   }
-  return found ? aim + best * assistPull(best) : aim;
+  return found ? aim + best * assistPull(best, shape) : aim;
 }
 
 type AutoTarget = Target & { boss?: boolean; elite?: string };
