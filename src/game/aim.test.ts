@@ -60,3 +60,27 @@ test("dead targets ignored and angles wrap", () => {
   assert.equal(applyAimAssist(0, 0, 0, [{ x: 300, y: 1, alive: false }]), 0);
   assert.ok(Math.abs(angleDiff(Math.PI - 0.05, -Math.PI + 0.05) - 0.1) < 1e-9);
 });
+
+test("thumb assist: wider cone, steady pull inside, fades to zero at the edge", async () => {
+  const { THUMB_ASSIST, LIGHT_ASSIST } = await import("./aim.ts");
+  assert.ok(THUMB_ASSIST.cone > LIGHT_ASSIST.cone);
+  // full pull in the inner half
+  assert.equal(assistPull(THUMB_ASSIST.cone * 0.3, THUMB_ASSIST), THUMB_ASSIST.pull);
+  // continuous at the edge (no snap when an enemy drifts in)
+  assert.equal(assistPull(THUMB_ASSIST.cone, THUMB_ASSIST), 0);
+  assert.ok(assistPull(THUMB_ASSIST.cone * 0.999, THUMB_ASSIST) < 0.005);
+  // never overshoots: correction is always less than the gap
+  for (let i = 1; i < 200; i++) {
+    const d = (THUMB_ASSIST.cone * i) / 200;
+    assert.ok(d * assistPull(d, THUMB_ASSIST) < d);
+  }
+  // a thumb 8 degrees off an enemy lands within ~3 degrees of it
+  const off = (8 * Math.PI) / 180;
+  const t = [{ x: Math.cos(off) * 300, y: Math.sin(off) * 300, alive: true }];
+  const out = applyAimAssist(0, 0, 0, t, THUMB_ASSIST);
+  assert.ok(((off - out) * 180) / Math.PI < 3, `left ${((off - out) * 180) / Math.PI} deg`);
+  // light assist (default) is unchanged and still tiny
+  assert.ok(Math.abs(applyAimAssist(0, 0, 0, t) - 0) < 1e-12, "8 deg is outside the light cone");
+  // thumb assist still never auto-locks onto something you're not pointing at
+  assert.equal(applyAimAssist(0, 0, 0, [{ x: 0, y: 200, alive: true }], THUMB_ASSIST), 0);
+});

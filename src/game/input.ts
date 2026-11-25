@@ -1,4 +1,4 @@
-import { orderForKey, orderForPadButton, type SquadOrder } from "./squad";
+import { orderForKey, orderForPadButton, type SquadOrder } from "./squad.ts";
 
 export type Actions = {
   moveX: number;
@@ -36,19 +36,27 @@ const GAME_KEYS = new Set([
 /**
  * Radial dead zone + response curve. Output magnitude is rescaled so it starts
  * at 0 right outside the dead zone (no jump), then shaped by `curve` (>1 gives
- * finer control near the centre while still reaching full speed at the rim).
+ * finer control near the centre). `sat` is the deflection at which the output
+ * reaches full strength, so the outer rim is a "full speed" band a thumb can
+ * hit without stretching to the very edge.
  */
-export function radial(x: number, y: number, dz = 0.18, curve = 1) {
+export function radial(x: number, y: number, dz = 0.18, curve = 1, sat = 1) {
   const m = Math.hypot(x, y);
   if (m < dz) return { x: 0, y: 0 };
-  const lin = Math.min(1, (m - dz) / (1 - dz));
+  const lin = Math.min(1, (m - dz) / Math.max(1e-6, sat - dz));
   const scale = (curve === 1 ? lin : Math.pow(lin, curve)) / m;
   return { x: x * scale, y: y * scale };
 }
 
-/** Movement stick: small dead zone, gentle curve. Aim stick: direction only, so no curve. */
+/**
+ * Movement stick: small dead zone, light curve, full speed from 85% of the
+ * stick's reach. (Before: full speed only at the rim with a 1.35 curve, so a
+ * half push gave ~40% speed and the mech felt sluggish under a thumb.)
+ * Aim stick: direction only, so no curve.
+ */
 export const MOVE_DZ = 0.12;
-export const MOVE_CURVE = 1.35;
+export const MOVE_CURVE = 1.2;
+export const MOVE_SAT = 0.85;
 export const AIM_DZ = 0.2;
 
 export class GameInput {
@@ -133,7 +141,7 @@ export class GameInput {
   }
 
   setLeftStick(x: number, y: number) {
-    this.leftStick = radial(x, y, MOVE_DZ, MOVE_CURVE);
+    this.leftStick = radial(x, y, MOVE_DZ, MOVE_CURVE, MOVE_SAT);
   }
 
   setRightStick(x: number, y: number) {
@@ -157,7 +165,7 @@ export class GameInput {
     if (pads) {
       for (const p of pads) {
         if (!p || p.mapping !== "standard") continue;
-        const ls = radial(p.axes[0] ?? 0, p.axes[1] ?? 0, MOVE_DZ, MOVE_CURVE);
+        const ls = radial(p.axes[0] ?? 0, p.axes[1] ?? 0, MOVE_DZ, MOVE_CURVE, MOVE_SAT);
         const rs = radial(p.axes[2] ?? 0, p.axes[3] ?? 0, AIM_DZ);
         mx += ls.x;
         my += ls.y;
