@@ -93,6 +93,12 @@ smaller than the ship sprite.
   do not quote targets as results.
 
 ## Updates (no delete-and-re-add)
+## Versioning
+
+First versioned build is **0.1.0** (2026-11-26). A build is identified as
+`v<version>+<short commit>` — see `docs/release.md` for the versioning
+scheme and the three release paths (PWA, debug APK, signed AAB). The
+version lives in `src/game/version.ts` and `package.json` (kept in sync).
 
 - The PWA service worker uses a content-hash cache version, `skipWaiting`
   + `clients.claim()`, and network-first fetch, so a new build takes over
