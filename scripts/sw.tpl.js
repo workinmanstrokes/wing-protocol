@@ -5,7 +5,10 @@ const CACHE = '__CACHE__';
 // Every game on the arcade site shares one cache storage, so only clear this game's own old caches.
 const OWN = CACHE.slice(0, CACHE.lastIndexOf('-') + 1);
 const FILES = __FILES__;
-self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => Promise.all(FILES.map((f) => c.add(new Request(f, { cache: 'reload' })).catch(() => {})))).then(() => self.skipWaiting())));
+// A new build installs and then WAITS. It never takes over on its own, because that reloads the page
+// (ios.js) and would throw the player out of a running mission. It takes over when ios.js sends
+// SKIP_WAITING (player is between missions) or when every window closes (next launch).
+self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => Promise.all(FILES.map((f) => c.add(new Request(f, { cache: 'reload' })).catch(() => {}))))));
 self.addEventListener('activate', (e) => e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k.startsWith(OWN) && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener('message', (e) => { if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting(); });
 self.addEventListener('fetch', (e) => {
@@ -15,6 +18,9 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== self.location.origin) return;
   e.respondWith(fetch(req).then((res) => {
     if (res && res.ok && res.type === 'basic') { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {}); }
+    // After a deploy the server may no longer have a file the running (older) build still asks for,
+    // like a code chunk loaded mid-run. Serve the cached copy instead of breaking the session.
+    if (res && res.status === 404 && req.mode !== 'navigate') return caches.match(req, { ignoreSearch: true }).then((hit) => hit || res);
     return res;
   }).catch(() => caches.match(req, { ignoreSearch: true }).then((hit) => hit || (req.mode === 'navigate' ? caches.match('./index.html').then((r) => r || caches.match('./')) : Response.error()))));
 });
