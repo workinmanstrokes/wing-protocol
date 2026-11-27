@@ -57,7 +57,7 @@ function bootWorker(src, { net = {}, cached = {} } = {}) {
 }
 
 /** A page running ios.js with a fake service worker container and DOM. */
-function bootPage(swSource, { controlled = true } = {}) {
+function bootPage(swSource, { controlled = true, updateFails = false } = {}) {
   const w = new Target();
   const d = new Target();
   const reloads = { n: 0 };
@@ -86,6 +86,8 @@ function bootPage(swSource, { controlled = true } = {}) {
   reg.installing = null;
   let pendingUpdate = null; // set by deploy()
   reg.update = () => {
+    // Real browsers reject when sw.js can't be fetched (offline, flaky signal).
+    if (updateFails) return Promise.reject(new TypeError("Failed to update a ServiceWorker"));
     if (!pendingUpdate) return;
     const u = pendingUpdate;
     pendingUpdate = null;
@@ -221,3 +223,20 @@ for (const [name, src] of [["sw.tpl.js (GitHub Pages build)", TEMPLATE], ["publi
     assert.equal(page.reloads.n, 0);
   });
 }
+
+test("a failed update check (sw.js unreachable) is caught, not an unhandled error", async () => {
+  const seen = [];
+  const onRejection = (err) => seen.push(err);
+  process.on("unhandledRejection", onRejection);
+  try {
+    const page = bootPage(RUNTIME, { updateFails: true });
+    await page.load(); // first check on load
+    await page.setHidden(true);
+    await page.setHidden(false); // check on every foregrounding
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(seen.length, 0, `unhandled: ${seen.map(String).join(", ")}`);
+    assert.equal(page.reloads.n, 0);
+  } finally {
+    process.off("unhandledRejection", onRejection);
+  }
+});
